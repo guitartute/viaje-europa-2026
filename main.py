@@ -4,45 +4,33 @@ import os
 import pydeck as pdk
 from datetime import datetime, timedelta
 from geopy.geocoders import Nominatim
-from geopy.extra.rate_limiter import RateLimiter
-import streamlit as st
 from streamlit_gsheets import GSheetsConnection
 
-# --- 1. CONFIGURACIÓN Y ARCHIVOS ---
+# --- 1. CONFIGURACIÓN ---
 st.set_page_config(page_title="Europa 2026 Pro", layout="wide")
-FILE_ITINERARIO = "itinerario_europa.csv"
-FILE_GLOBALES = "gastos_globales.csv"
-FILE_DETALLES = "detalles_otros.csv"
 FOLDER_ADJUNTOS = "mis_adjuntos"
-
 if not os.path.exists(FOLDER_ADJUNTOS):
     os.makedirs(FOLDER_ADJUNTOS)
 
-# --- CONFIGURACIÓN DE CONEXIÓN ---
-# En Streamlit Cloud, pondremos las credenciales en "Secrets"
+# --- CONFIGURACIÓN DE CONEXIÓN A GOOGLE ---
 conn = st.connection("gsheets", type=GSheetsConnection)
 
 def cargar_datos(nombre_hoja):
     try:
-        # Intenta leer la pestaña específica
-        return conn.read(worksheet=nombre_hoja, ttl="0")
+        df = conn.read(worksheet=nombre_hoja, ttl="0")
+        if df.empty: raise Exception("Vacío")
+        return df
     except:
-        # Si no existe, devuelve un DataFrame vacío con las columnas correctas
-        return pd.DataFrame()
+        # Esquema por defecto si la hoja no existe o está vacía
+        if nombre_hoja == "Itinerario":
+            return pd.DataFrame(columns=["Fecha", "País", "Ciudad", "Traslado $", "P. Traslado", "Aloj. $", "P. Aloj", "Comida $", "P. Comida", "Otros $", "Notas"])
+        elif nombre_hoja == "Globales":
+            return pd.DataFrame(columns=["Pagado", "Descripción", "Monto $"])
+        else: # Detalles Otros
+            return pd.DataFrame(columns=["Fecha", "Categoría/Descripción", "Monto $", "Pagado"])
 
-# --- REEMPLAZO EN TU LÓGICA DE GUARDADO ---
 def guardar_en_google(df, nombre_hoja):
     conn.update(worksheet=nombre_hoja, data=df)
-    st.success(f"Datos sincronizados en Google Sheets ({nombre_hoja})")
-
-def cargar_detalles():
-    if os.path.exists(FILE_DETALLES):
-        df = pd.read_csv(FILE_DETALLES)
-        df["Monto $"] = pd.to_numeric(df["Monto $"], errors='coerce').fillna(0.0)
-        df["Pagado"] = df["Pagado"].astype(bool)
-        df["Categoría/Descripción"] = df["Categoría/Descripción"].astype(str).replace("nan", "")
-        return df
-    return pd.DataFrame(columns=["Fecha", "Categoría/Descripción", "Monto $", "Pagado"])
 
 @st.cache_data
 def obtener_coordenadas(ciudad, pais):
@@ -51,68 +39,103 @@ def obtener_coordenadas(ciudad, pais):
         location = geolocator.geocode(f"{ciudad}, {pais}")
         if location: return [location.latitude, location.longitude]
     except: return None
-    return None
 
-# --- 3. INICIALIZACIÓN DE DATOS ---
-df_it = cargar_datos()
-df_detalles = cargar_detalles()
-df_gl = pd.read_csv(FILE_GLOBALES) if os.path.exists(FILE_GLOBALES) else pd.DataFrame(columns=["Pagado", "Descripción", "Monto $"])
+# --- 3. INICIALIZACIÓN DE DATOS (Corregido) ---
+df_it = cargar_datos("Itinerario")
+df_gl = cargar_datos("Globales")
+df_detalles = cargar_datos("Detalles_Otros")
 
-# --- 4. BARRA LATERAL (SIDEBAR) Y CÁLCULOS ---
+# Limpieza de tipos para evitar errores de cálculo
+for df in [df_it, df_gl, df_detalles]:
+    if "Monto $" in df.columns: df["Monto $"] = pd.to_numeric(df["Monto $"], errors='coerce').fillna(0.0)
+    if "Pagado" in df.columns: df["Pagado"] = df["Pagado"].astype(bool)
+# (Repetir para las columnas específicas de df_it si es necesario)
+for c in ["Traslado $", "Aloj. $", "Comida $", "Otros $"]:
+    df_it[c] = pd.to_numeric(df_it[c], errors='coerce').fillna(0.0)
+for c in ["P. Traslado", "P. Aloj", "P. Comida"]:
+    df_it[c] = df_it[c].astype(bool)
+
+# --- 4. CÁLCULOS Y SIDEBAR ---
 st.sidebar.header("⚙️ Configuración")
 f_ini = st.sidebar.date_input("Inicio", datetime.now())
 f_fin = st.sidebar.date_input("Fin", datetime.now() + timedelta(days=7))
 
 if st.sidebar.button("Reiniciar Itinerario"):
     dias = (f_fin - f_ini).days + 1
-    nuevas_filas = [{"Fecha": (f_ini + timedelta(days=i)).strftime("%d/%m (%a)"), 
-                     "País": "", "Ciudad": "", "Traslado $": 0.0, "P. Traslado": False,
-                     "Aloj. $": 0.0, "P. Aloj": False, "Comida $": 0.0, "P. Comida": False,
-                     "Otros $": 0.0, "Notas": ""} for i in range(dias)]
-    df_it = pd.DataFrame(nuevas_filas)
-    guardar_datos(df_it, df_gl)
+    df_it = pd.DataFrame([{"Fecha": (f_ini + timedelta(days=i)).strftime("%d/%m (%a)"), "País": "", "Ciudad": "", "Traslado $": 0.0, "P. Traslado": False, "Aloj. $": 0.0, "P. Aloj": False, "Comida $": 0.0, "P. Comida": False, "Otros $": 0.0, "Notas": ""} for i in range(dias)])
+    guardar_en_google(df_it, "Itinerario")
     st.rerun()
 
-# LÓGICA DE PRESUPUESTO
-plan_base = df_it["Traslado $"].sum() + df_it["Aloj. $"].sum() + df_it["Comida $"].sum()
-plan_otros = df_detalles["Monto $"].sum()
-plan_global = df_gl["Monto $"].sum() if not df_gl.empty else 0
-total_plan = plan_base + plan_otros + plan_global
+# Lógica de Totales
+total_plan = df_it[["Traslado $", "Aloj. $", "Comida $"]].sum().sum() + df_detalles["Monto $"].sum() + df_gl["Monto $"].sum()
+pag_it = df_it.loc[df_it["P. Traslado"], "Traslado $"].sum() + df_it.loc[df_it["P. Aloj"], "Aloj. $"].sum() + df_it.loc[df_it["P. Comida"], "Comida $"].sum()
+total_pag = pag_it + df_it["Otros $"].sum() + df_gl.loc[df_gl["Pagado"], "Monto $"].sum()
 
-pag_base = (df_it.loc[df_it["P. Traslado"], "Traslado $"].sum() + 
-            df_it.loc[df_it["P. Aloj"], "Aloj. $"].sum() + 
-            df_it.loc[df_it["P. Comida"], "Comida $"].sum())
-total_pag = pag_base + df_it["Otros $"].sum() + (df_gl.loc[df_gl["Pagado"]==True, "Monto $"].sum() if not df_gl.empty else 0)
-
-st.sidebar.markdown("---")
 st.sidebar.metric("Presupuesto Total", f"$ {total_plan:,.2f}")
 st.sidebar.metric("Ya Pagado", f"$ {total_pag:,.2f}")
-st.sidebar.metric("Pendiente", f"$ {total_plan - total_pag:,.2f}", delta_color="inverse")
+st.sidebar.metric("Pendiente", f"$ {total_plan - total_pag:,.2f}")
 
-# --- 5. CUERPO PRINCIPAL ---
-st.title("🌍 Mi Viaje a Europa 2026")
+# --- 5. TABS ---
 t1, t2, t3, t4 = st.tabs(["📅 Itinerario", "🎒 Globales", "📂 Adjuntos", "📍 Mapa"])
 
 with t1:
-    df_it_edit = st.data_editor(df_it, num_rows="dynamic", width="stretch", hide_index=True,
-        column_config={"Otros $": st.column_config.NumberColumn("Otros $ (Pagado)", disabled=True, format="$ %.2f")})
+    df_it_edit = st.data_editor(df_it, num_rows="dynamic", width="stretch", hide_index=True)
     if not df_it_edit.equals(df_it):
-        guardar_datos(df_it_edit, df_gl); st.rerun()
+        guardar_en_google(df_it_edit, "Itinerario"); st.rerun()
 
     st.markdown("---")
-    st.subheader("🕵️ Desglose de 'Otros'")
-    dia_sel = st.selectbox("Día para detallar:", df_it_edit["Fecha"].tolist())
+    dia_sel = st.selectbox("Detallar Otros:", df_it_edit["Fecha"].tolist())
     det_dia = df_detalles[df_detalles["Fecha"] == dia_sel].drop(columns=["Fecha"]).reset_index(drop=True)
-    
-    det_edit = st.data_editor(det_dia, num_rows="dynamic", width="stretch", hide_index=True,
-        column_config={"Categoría/Descripción": st.column_config.TextColumn("Descripción"),
-                       "Monto $": st.column_config.NumberColumn(format="$ %.2f")})
+    det_edit = st.data_editor(det_dia, num_rows="dynamic", width="stretch", hide_index=True)
     
     if not det_edit.equals(det_dia):
         df_detalles = pd.concat([df_detalles[df_detalles["Fecha"] != dia_sel], det_edit.assign(Fecha=dia_sel)], ignore_index=True)
-        df_detalles.to_csv(FILE_DETALLES, index=False)
-        df_it_edit.loc[df_it_edit["Fecha"] == dia_sel, "Otros $"] = det_edit.loc[det_edit["Pagado"]==True, "Monto $"].sum()
-        guardar_datos(df_it_edit, df_gl); st.rerun()
+        guardar_en_google(df_detalles, "Detalles_Otros")
+        df_it_edit.loc[df_it_edit["Fecha"] == dia_sel, "Otros $"] = det_edit.loc[det_edit["Pagado"], "Monto $"].sum()
+        guardar_en_google(df_it_edit, "Itinerario"); st.rerun()
+
+with t2:
+    st.subheader("Gastos Globales")
+    df_gl_edit = st.data_editor(df_gl, num_rows="dynamic", width="stretch", hide_index=True)
+    if not df_gl_edit.equals(df_gl):
+        guardar_en_google(df_gl_edit, "Globales"); st.rerun()
+
+with t3:
+    st.info("La gestión de archivos adjuntos se guarda localmente en el servidor.")
+    if not df_it_edit.empty:
+        # Selector del día para ver/subir archivos
+        dia_adjunto = st.selectbox("Selecciona el día para gestionar archivos:", df_it_edit["Fecha"].tolist(), key="sel_adj")
+        
+        # Crear carpeta limpia para el nombre del archivo
+        nombre_carpeta = dia_adjunto.replace("/", "-").replace(" ", "_")
+        ruta_dia = os.path.join(FOLDER_ADJUNTOS, nombre_carpeta)
+        
+        if not os.path.exists(ruta_dia):
+            os.makedirs(ruta_dia)
+            
+        # Subida de archivos
+        archivo_nuevo = st.file_uploader(f"Subir archivo para {dia_adjunto}:", key=f"up_{nombre_carpeta}")
+        
+        if archivo_nuevo is not None:
+            with open(os.path.join(ruta_dia, archivo_nuevo.name), "wb") as f:
+                f.write(archivo_nuevo.getbuffer())
+            st.success(f"¡{archivo_nuevo.name} guardado correctamente!")
+            st.rerun()
+
+        st.markdown("---")
+        st.write(f"Archivos guardados para el día **{dia_adjunto}**:")
+        
+        archivos_en_carpeta = os.listdir(ruta_dia)
+        if archivos_en_carpeta:
+            for arc in archivos_en_carpeta:
+                col_n, col_d = st.columns([0.8, 0.2])
+                col_n.write(f"📄 {arc}")
+                with open(os.path.join(ruta_dia, arc), "rb") as f:
+                    col_d.download_button("Bajar", f, file_name=arc, key=f"dl_{arc}")
+        else:
+            st.warning("No hay archivos adjuntos para este día todavía.")
+    else:
+        st.info("Genera un itinerario primero para poder adjuntar archivos.")
 
 with t4:
     st.subheader("🗺️ Ruta")
