@@ -25,14 +25,22 @@ elif "private_key" not in st.secrets.connections.gsheets:
 else:
     st.success("✅ ¡Credenciales detectadas correctamente!")
 
-@st.cache_data(ttl=600) # Guarda en memoria por 600 segundos (10 min)
+@st.cache_data(ttl=600)
 def cargar_datos(nombre_hoja):
     try:
-        df = conn.read(worksheet=nombre_hoja, ttl="10m") # También cacheamos la conexión
+        # Intentamos leer la hoja
+        df = conn.read(worksheet=nombre_hoja, ttl="10m")
+        if df is None or df.empty:
+            raise ValueError("Hoja vacía")
         return df
     except Exception as e:
-        st.error(f"Error de lectura: {e}")
-        return pd.DataFrame()
+        # SI FALLA EL 404, CREAMOS LAS COLUMNAS PARA QUE EL RESTO DEL CÓDIGO NO EXPLOTE
+        if nombre_hoja == "Itinerario":
+            return pd.DataFrame(columns=["Fecha", "País", "Ciudad", "Traslado $", "P. Traslado", "Aloj. $", "P. Aloj", "Comida $", "P. Comida", "Otros $", "Notas"])
+        elif nombre_hoja == "Globales":
+            return pd.DataFrame(columns=["Pagado", "Descripción", "Monto $"])
+        else:
+            return pd.DataFrame(columns=["Fecha", "Categoría/Descripción", "Monto $", "Pagado"])
 
 def guardar_en_google(df, nombre_hoja):
     try:
