@@ -12,11 +12,18 @@ FOLDER_ADJUNTOS = "mis_adjuntos"
 if not os.path.exists(FOLDER_ADJUNTOS):
     os.makedirs(FOLDER_ADJUNTOS)
 
+# --- CONEXIÓN ---
 conn = st.connection("gsheets", type=GSheetsConnection)
 
-# DEPUREMOS: Si esto sale como False en tu app, es que no está leyendo los secretos
-if "service_account" not in st.secrets["connections"]["gsheets"]:
-    st.error("⚠️ La App no detecta las credenciales de Google. Revisa los Secrets.")
+# DEPUREMOS DE FORMA MÁS SIMPLE
+if "connections" not in st.secrets:
+    st.error("❌ Streamlit no encuentra la sección [connections] en los Secrets.")
+elif "gsheets" not in st.secrets.connections:
+    st.error("❌ Streamlit no encuentra la sección [gsheets] dentro de connections.")
+elif "private_key" not in st.secrets.connections.gsheets:
+    st.error("❌ Streamlit encuentra gsheets pero NO la private_key.")
+else:
+    st.success("✅ ¡Credenciales detectadas correctamente!")
 
 def cargar_datos(nombre_hoja):
     try:
