@@ -30,15 +30,12 @@ def cargar_datos(nombre_hoja):
             return pd.DataFrame(columns=["Fecha", "Categoría/Descripción", "Monto $", "Pagado"])
 
 def guardar_en_google(df, nombre_hoja):
-    # 1. Convertimos todo a tipos simples para que Google no se confunda
-    df_save = df.copy()
-    
-    # Convertir booleanos a texto o asegurar que son bool puros
-    for col in df_save.columns:
-        if "P. " in col or col == "Pagado":
-            df_save[col] = df_save[col].astype(bool)
-        if "$" in col:
-            df_save[col] = pd.to_numeric(df_save[col], errors='coerce').fillna(0.0)
+    # Convertimos a strings y números puros para evitar errores de JSON
+    df_clean = df.copy()
+    try:
+        conn.update(worksheet=nombre_hoja, data=df_clean)
+    except Exception as e:
+        st.error(f"Falla de conexión con Google: {e}")
 
     try:
         # Usamos el método update directamente
