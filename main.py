@@ -25,40 +25,26 @@ elif "private_key" not in st.secrets.connections.gsheets:
 else:
     st.success("✅ ¡Credenciales detectadas correctamente!")
 
+@st.cache_data(ttl=600) # Guarda en memoria por 600 segundos (10 min)
 def cargar_datos(nombre_hoja):
     try:
-        df = conn.read(worksheet=nombre_hoja, ttl="0")
-        if df.empty: raise Exception("Vacío")
+        df = conn.read(worksheet=nombre_hoja, ttl="10m") # También cacheamos la conexión
         return df
-    except:
-        # Esquema por defecto si la hoja no existe o está vacía
-        if nombre_hoja == "Itinerario":
-            return pd.DataFrame(columns=["Fecha", "País", "Ciudad", "Traslado $", "P. Traslado", "Aloj. $", "P. Aloj", "Comida $", "P. Comida", "Otros $", "Notas"])
-        elif nombre_hoja == "Globales":
-            return pd.DataFrame(columns=["Pagado", "Descripción", "Monto $"])
-        else: # Detalles Otros
-            return pd.DataFrame(columns=["Fecha", "Categoría/Descripción", "Monto $", "Pagado"])
+    except Exception as e:
+        st.error(f"Error de lectura: {e}")
+        return pd.DataFrame()
 
 def guardar_en_google(df, nombre_hoja):
     try:
-        # 1. Limpieza profunda de datos antes de enviar
-        df_limpio = df.copy()
-        
-        # Convertimos todo a string o números básicos para evitar errores de JSON
-        for col in df_limpio.columns:
-            if "$" in col or col == "Monto $":
-                df_limpio[col] = pd.to_numeric(df_limpio[col], errors='coerce').fillna(0.0)
-            elif "P. " in col or col == "Pagado":
-                df_limpio[col] = df_limpio[col].astype(bool)
-            else:
-                df_limpio[col] = df_limpio[col].astype(str).replace("nan", "")
-
-        # 2. Intento de guardado
-        conn.update(worksheet=nombre_hoja, data=df_limpio)
-        st.toast(f"✅ Sincronizado: {nombre_hoja}")
+        conn.update(worksheet=nombre_hoja, data=df)
+        # ESTO ES CLAVE: Limpia la memoria para que al recargar lea los datos nuevos
+        st.cache_data.clear() 
+        st.toast(f"✅ ¡Sincronizado!")
     except Exception as e:
-        st.error(f"❌ Error al sincronizar {nombre_hoja}: {e}")
-        # Esto nos dirá exactamente qué columna o qué permiso falta
+        if "429" in str(e):
+            st.error("🚨 Google está saturado. Espera 30 segundos y vuelve a intentar.")
+        else:
+            st.error(f"Error: {e}")
 
 @st.cache_data
 def obtener_coordenadas(ciudad, pais):
