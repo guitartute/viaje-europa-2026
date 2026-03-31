@@ -30,7 +30,12 @@ def cargar_datos(nombre_hoja):
             return pd.DataFrame(columns=["Fecha", "Categoría/Descripción", "Monto $", "Pagado"])
 
 def guardar_en_google(df, nombre_hoja):
-    conn.update(worksheet=nombre_hoja, data=df)
+    try:
+        # Forzamos la actualización usando el nombre de la hoja
+        conn.update(worksheet=nombre_hoja, data=df)
+        st.toast(f"¡Sincronizado con Google Sheets: {nombre_hoja}! ✅")
+    except Exception as e:
+        st.error(f"Error al guardar en {nombre_hoja}. Revisa si la pestaña existe en Google Sheets.")
 
 @st.cache_data
 def obtener_coordenadas(ciudad, pais):
