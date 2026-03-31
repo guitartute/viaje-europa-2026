@@ -40,19 +40,25 @@ def cargar_datos(nombre_hoja):
             return pd.DataFrame(columns=["Fecha", "Categoría/Descripción", "Monto $", "Pagado"])
 
 def guardar_en_google(df, nombre_hoja):
-    # Convertimos a strings y números puros para evitar errores de JSON
-    df_clean = df.copy()
     try:
-        conn.update(worksheet=nombre_hoja, data=df_clean)
-    except Exception as e:
-        st.error(f"Falla de conexión con Google: {e}")
+        # 1. Limpieza profunda de datos antes de enviar
+        df_limpio = df.copy()
+        
+        # Convertimos todo a string o números básicos para evitar errores de JSON
+        for col in df_limpio.columns:
+            if "$" in col or col == "Monto $":
+                df_limpio[col] = pd.to_numeric(df_limpio[col], errors='coerce').fillna(0.0)
+            elif "P. " in col or col == "Pagado":
+                df_limpio[col] = df_limpio[col].astype(bool)
+            else:
+                df_limpio[col] = df_limpio[col].astype(str).replace("nan", "")
 
-    try:
-        # Usamos el método update directamente
-        conn.update(worksheet=nombre_hoja, data=df_save)
-        st.toast(f"✅ ¡Guardado en {nombre_hoja}!")
+        # 2. Intento de guardado
+        conn.update(worksheet=nombre_hoja, data=df_limpio)
+        st.toast(f"✅ Sincronizado: {nombre_hoja}")
     except Exception as e:
-        st.error(f"Error al sincronizar: {e}")
+        st.error(f"❌ Error al sincronizar {nombre_hoja}: {e}")
+        # Esto nos dirá exactamente qué columna o qué permiso falta
 
 @st.cache_data
 def obtener_coordenadas(ciudad, pais):
@@ -84,7 +90,6 @@ f_fin = st.sidebar.date_input("Fin", datetime.now() + timedelta(days=7))
 
 if st.sidebar.button("Reiniciar Itinerario"):
     dias = (f_fin - f_ini).days + 1
-    # Creamos la lista de diccionarios
     nuevas_filas = []
     for i in range(dias):
         fecha_str = (f_ini + timedelta(days=i)).strftime("%d/%m (%a)")
@@ -96,14 +101,10 @@ if st.sidebar.button("Reiniciar Itinerario"):
             "Otros $": 0.0, "Notas": ""
         })
     
-    # Convertimos a DataFrame
     df_it_nuevo = pd.DataFrame(nuevas_filas)
     
-    # GUARDADO CRÍTICO
+    # Intentamos guardar
     guardar_en_google(df_it_nuevo, "Itinerario")
-    
-    # Forzamos que la variable local se actualice antes del rerun
-    st.session_state["df_it"] = df_it_nuevo
     st.rerun()
 
 # Lógica de Totales
