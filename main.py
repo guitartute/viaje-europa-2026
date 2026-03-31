@@ -30,12 +30,22 @@ def cargar_datos(nombre_hoja):
             return pd.DataFrame(columns=["Fecha", "Categoría/Descripción", "Monto $", "Pagado"])
 
 def guardar_en_google(df, nombre_hoja):
+    # 1. Convertimos todo a tipos simples para que Google no se confunda
+    df_save = df.copy()
+    
+    # Convertir booleanos a texto o asegurar que son bool puros
+    for col in df_save.columns:
+        if "P. " in col or col == "Pagado":
+            df_save[col] = df_save[col].astype(bool)
+        if "$" in col:
+            df_save[col] = pd.to_numeric(df_save[col], errors='coerce').fillna(0.0)
+
     try:
-        # Forzamos la actualización usando el nombre de la hoja
-        conn.update(worksheet=nombre_hoja, data=df)
-        st.toast(f"¡Sincronizado con Google Sheets: {nombre_hoja}! ✅")
+        # Usamos el método update directamente
+        conn.update(worksheet=nombre_hoja, data=df_save)
+        st.toast(f"✅ ¡Guardado en {nombre_hoja}!")
     except Exception as e:
-        st.error(f"Error al guardar en {nombre_hoja}. Revisa si la pestaña existe en Google Sheets.")
+        st.error(f"Error al sincronizar: {e}")
 
 @st.cache_data
 def obtener_coordenadas(ciudad, pais):
@@ -67,8 +77,26 @@ f_fin = st.sidebar.date_input("Fin", datetime.now() + timedelta(days=7))
 
 if st.sidebar.button("Reiniciar Itinerario"):
     dias = (f_fin - f_ini).days + 1
-    df_it = pd.DataFrame([{"Fecha": (f_ini + timedelta(days=i)).strftime("%d/%m (%a)"), "País": "", "Ciudad": "", "Traslado $": 0.0, "P. Traslado": False, "Aloj. $": 0.0, "P. Aloj": False, "Comida $": 0.0, "P. Comida": False, "Otros $": 0.0, "Notas": ""} for i in range(dias)])
-    guardar_en_google(df_it, "Itinerario")
+    # Creamos la lista de diccionarios
+    nuevas_filas = []
+    for i in range(dias):
+        fecha_str = (f_ini + timedelta(days=i)).strftime("%d/%m (%a)")
+        nuevas_filas.append({
+            "Fecha": fecha_str, "País": "", "Ciudad": "", 
+            "Traslado $": 0.0, "P. Traslado": False, 
+            "Aloj. $": 0.0, "P. Aloj": False, 
+            "Comida $": 0.0, "P. Comida": False, 
+            "Otros $": 0.0, "Notas": ""
+        })
+    
+    # Convertimos a DataFrame
+    df_it_nuevo = pd.DataFrame(nuevas_filas)
+    
+    # GUARDADO CRÍTICO
+    guardar_en_google(df_it_nuevo, "Itinerario")
+    
+    # Forzamos que la variable local se actualice antes del rerun
+    st.session_state["df_it"] = df_it_nuevo
     st.rerun()
 
 # Lógica de Totales
