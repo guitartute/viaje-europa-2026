@@ -2,3 +2,6 @@ streamlit
 pandas
 pydeck
 geopy
+st-gsheets-connection
+gspread
+oauth2client
