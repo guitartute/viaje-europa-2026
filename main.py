@@ -22,7 +22,7 @@ if not os.path.exists(FOLDER_ADJUNTOS):
 # En Streamlit Cloud, pondremos las credenciales en "Secrets"
 conn = st.connection("gsheets", type=GSheetsConnection)
 
-def cargar_desde_google(nombre_hoja):
+def cargar_datos(nombre_hoja):
     try:
         # Intenta leer la pestaña específica
         return conn.read(worksheet=nombre_hoja, ttl="0")
