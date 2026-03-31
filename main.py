@@ -12,8 +12,11 @@ FOLDER_ADJUNTOS = "mis_adjuntos"
 if not os.path.exists(FOLDER_ADJUNTOS):
     os.makedirs(FOLDER_ADJUNTOS)
 
-# --- CONFIGURACIÓN DE CONEXIÓN A GOOGLE ---
 conn = st.connection("gsheets", type=GSheetsConnection)
+
+# DEPUREMOS: Si esto sale como False en tu app, es que no está leyendo los secretos
+if "service_account" not in st.secrets["connections"]["gsheets"]:
+    st.error("⚠️ La App no detecta las credenciales de Google. Revisa los Secrets.")
 
 def cargar_datos(nombre_hoja):
     try:
