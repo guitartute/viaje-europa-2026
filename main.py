@@ -81,24 +81,24 @@ f_ini = st.sidebar.date_input("Inicio", datetime.now())
 f_fin = st.sidebar.date_input("Fin", datetime.now() + timedelta(days=7))
 
 if st.sidebar.button("Reiniciar Itinerario"):
-    dias = (f_fin - f_ini).days + 1
-    nuevas_filas = []
-    for i in range(dias):
-        fecha_str = (f_ini + timedelta(days=i)).strftime("%d/%m (%a)")
-        nuevas_filas.append({
-            "Fecha": fecha_str, "País": "", "Ciudad": "", 
-            "Traslado $": 0.0, "P. Traslado": False, 
-            "Aloj. $": 0.0, "P. Aloj": False, 
-            "Comida $": 0.0, "P. Comida": False, 
-            "Otros $": 0.0, "Notas": ""
-        })
-    
-    df_it_nuevo = pd.DataFrame(nuevas_filas)
-    
-    # Intentar guardar y SOLO si tiene éxito, reiniciar la app
-    guardar_en_google(df_it_nuevo, "Itinerario")
-    st.info("Itinerario creado. Recargando...")
-    st.rerun()
+    with st.spinner("Comunicando con Google..."):
+        dias = (f_fin - f_ini).days + 1
+        nuevas_filas = []
+        for i in range(dias):
+            fecha_str = (f_ini + timedelta(days=i)).strftime("%d/%m (%a)")
+            nuevas_filas.append({
+                "Fecha": fecha_str, "País": "", "Ciudad": "", 
+                "Traslado $": 0.0, "P. Traslado": False, 
+                "Aloj. $": 0.0, "P. Aloj": False, 
+                "Comida $": 0.0, "P. Comida": False, 
+                "Otros $": 0.0, "Notas": ""
+            })
+        
+        df_it_nuevo = pd.DataFrame(nuevas_filas)
+        guardar_en_google(df_it_nuevo, "Itinerario")
+        st.success("Itinerario creado con éxito.")
+        # No hacemos rerun instantáneo para dejar que Google procese
+        st.info("Por favor, refresca la página manualmente en 5 segundos.")
 
 # Lógica de Totales
 total_plan = df_it[["Traslado $", "Aloj. $", "Comida $"]].sum().sum() + df_detalles["Monto $"].sum() + df_gl["Monto $"].sum()
