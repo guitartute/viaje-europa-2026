@@ -25,41 +25,33 @@ elif "private_key" not in st.secrets.connections.gsheets:
 else:
     st.success("✅ ¡Credenciales detectadas correctamente!")
 
-@st.cache_data(ttl=600)
+@st.cache_data(ttl=300) # Caché de 5 minutos
 def cargar_datos(nombre_hoja):
     try:
-        # Intentamos leer la hoja
-        df = conn.read(worksheet=nombre_hoja, ttl="10m")
-        if df is None or df.empty:
-            raise ValueError("Hoja vacía")
+        # Intentamos leer. Si falla, el caché evitará reintentos constantes
+        df = conn.read(worksheet=nombre_hoja, ttl="5m")
         return df
     except Exception as e:
-        # SI FALLA EL 404, CREAMOS LAS COLUMNAS PARA QUE EL RESTO DEL CÓDIGO NO EXPLOTE
-        if nombre_hoja == "Itinerario":
-            return pd.DataFrame(columns=["Fecha", "País", "Ciudad", "Traslado $", "P. Traslado", "Aloj. $", "P. Aloj", "Comida $", "P. Comida", "Otros $", "Notas"])
-        elif nombre_hoja == "Globales":
-            return pd.DataFrame(columns=["Pagado", "Descripción", "Monto $"])
-        else:
-            return pd.DataFrame(columns=["Fecha", "Categoría/Descripción", "Monto $", "Pagado"])
+        # Si no la encuentra, devolvemos un DataFrame con columnas pero NO guardamos nada aún
+        columnas = {
+            "Itinerario": ["Fecha", "País", "Ciudad", "Traslado $", "P. Traslado", "Aloj. $", "P. Aloj", "Comida $", "P. Comida", "Otros $", "Notas"],
+            "Globales": ["Pagado", "Descripción", "Monto $"],
+            "Detalles_Otros": ["Fecha", "Categoría/Descripción", "Monto $", "Pagado"]
+        }
+        return pd.DataFrame(columns=columnas.get(nombre_hoja, []))
 
 def guardar_en_google(df, nombre_hoja):
     try:
-        # 1. Limpiar el DataFrame para que Google lo acepte
-        df_save = df.copy()
-        
-        # 2. Intentar la actualización
+        # Forzamos que los datos sean compatibles con JSON
+        df_save = df.fillna("")
         conn.update(worksheet=nombre_hoja, data=df_save)
-        
-        # 3. Limpiar caché para que la App vea los cambios
-        st.cache_data.clear()
-        st.toast(f"✅ ¡Datos guardados en {nombre_hoja}!")
+        st.cache_data.clear() # Limpiamos caché solo tras un guardado exitoso
+        st.toast(f"✅ Guardado en {nombre_hoja}")
     except Exception as e:
-        # Si da 404, imprimimos un mensaje más claro
-        if "404" in str(e):
-            st.error(f"❌ Error 404: No existe la pestaña '{nombre_hoja}' en tu Google Sheets.")
+        if "429" in str(e):
+            st.error("⏳ Google está saturado. Espera 1 minuto sin tocar nada.")
         else:
-            st.error(f"❌ Error al guardar: {e}")
-
+            st.error(f"❌ Error al guardar {nombre_hoja}: {e}")
 @st.cache_data
 def obtener_coordenadas(ciudad, pais):
     try:
