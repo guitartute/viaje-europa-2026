@@ -117,16 +117,50 @@ with t1:
     if not df_it_edit.equals(df_it):
         guardar_en_google(df_it_edit, "Itinerario"); st.rerun()
 
+# --- 1. LÓGICA DE PROTECCIÓN PARA DETALLES ---
     st.markdown("---")
-    dia_sel = st.selectbox("Detallar Otros:", df_it_edit["Fecha"].tolist())
+    st.subheader("🕵️ Desglose de 'Otros'")
+    
+    # Aseguramos que dia_sel sea válido
+    lista_fechas = df_it_edit["Fecha"].tolist()
+    dia_sel = st.selectbox("Día para detallar:", lista_fechas)
+    
+    # Filtramos los detalles del día
     det_dia = df_detalles[df_detalles["Fecha"] == dia_sel].drop(columns=["Fecha"]).reset_index(drop=True)
-    det_edit = st.data_editor(det_dia, num_rows="dynamic", width="stretch", hide_index=True)
+    
+    # FUERZA BRUTA: Si la tabla está vacía, aseguramos las columnas para que no de ValueError
+    for col in ["Categoría/Descripción", "Monto $", "Pagado"]:
+        if col not in det_dia.columns:
+            det_dia[col] = False if col == "Pagado" else (0.0 if "$" in col else "")
+
+    # Editor de detalles
+    det_edit = st.data_editor(
+        det_dia, 
+        num_rows="dynamic", 
+        width="stretch", 
+        hide_index=True,
+        key=f"ed_{dia_sel}"
+    )
     
     if not det_edit.equals(det_dia):
-        df_detalles = pd.concat([df_detalles[df_detalles["Fecha"] != dia_sel], det_edit.assign(Fecha=dia_sel)], ignore_index=True)
-        guardar_en_google(df_detalles, "Detalles_Otros")
-        df_it_edit.loc[df_it_edit["Fecha"] == dia_sel, "Otros $"] = det_edit.loc[det_edit["Pagado"], "Monto $"].sum()
-        guardar_en_google(df_it_edit, "Itinerario"); st.rerun()
+        # 1. Reconstruir el DataFrame completo de detalles
+        df_detalles_nuevo = pd.concat([df_detalles[df_detalles["Fecha"] != dia_sel], det_edit.assign(Fecha=dia_sel)], ignore_index=True)
+        
+        # 2. Guardar en Google
+        guardar_en_google(df_detalles_nuevo, "Detalles_Otros")
+        
+        # 3. ACTUALIZACIÓN SEGURA DEL TOTAL (Aquí es donde daba el error)
+        # Verificamos que existan datos antes de sumar
+        if not det_edit.empty and "Pagado" in det_edit.columns:
+            # Forzamos que Pagado sea booleano para evitar el ValueError
+            det_edit["Pagado"] = det_edit["Pagado"].astype(bool)
+            total_pagado_dia = det_edit.loc[det_edit["Pagado"] == True, "Monto $"].sum()
+        else:
+            total_pagado_dia = 0.0
+            
+        df_it_edit.loc[df_it_edit["Fecha"] == dia_sel, "Otros $"] = total_pagado_dia
+        guardar_en_google(df_it_edit, "Itinerario")
+        st.rerun()
 
 with t2:
     st.subheader("Gastos Globales")
