@@ -44,15 +44,21 @@ def cargar_datos(nombre_hoja):
 
 def guardar_en_google(df, nombre_hoja):
     try:
-        conn.update(worksheet=nombre_hoja, data=df)
-        # ESTO ES CLAVE: Limpia la memoria para que al recargar lea los datos nuevos
-        st.cache_data.clear() 
-        st.toast(f"✅ ¡Sincronizado!")
+        # 1. Limpiar el DataFrame para que Google lo acepte
+        df_save = df.copy()
+        
+        # 2. Intentar la actualización
+        conn.update(worksheet=nombre_hoja, data=df_save)
+        
+        # 3. Limpiar caché para que la App vea los cambios
+        st.cache_data.clear()
+        st.toast(f"✅ ¡Datos guardados en {nombre_hoja}!")
     except Exception as e:
-        if "429" in str(e):
-            st.error("🚨 Google está saturado. Espera 30 segundos y vuelve a intentar.")
+        # Si da 404, imprimimos un mensaje más claro
+        if "404" in str(e):
+            st.error(f"❌ Error 404: No existe la pestaña '{nombre_hoja}' en tu Google Sheets.")
         else:
-            st.error(f"Error: {e}")
+            st.error(f"❌ Error al guardar: {e}")
 
 @st.cache_data
 def obtener_coordenadas(ciudad, pais):
@@ -97,8 +103,9 @@ if st.sidebar.button("Reiniciar Itinerario"):
     
     df_it_nuevo = pd.DataFrame(nuevas_filas)
     
-    # Intentamos guardar
+    # Intentar guardar y SOLO si tiene éxito, reiniciar la app
     guardar_en_google(df_it_nuevo, "Itinerario")
+    st.info("Itinerario creado. Recargando...")
     st.rerun()
 
 # Lógica de Totales
