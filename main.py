@@ -216,50 +216,53 @@ with t1:
         guardar_datos_sql(df_it_edit, "itinerario")
         st.rerun()
 
-# --- 1. LÓGICA DE PROTECCIÓN PARA DETALLES ---
-    st.markdown("---")
-    st.subheader("🕵️ Desglose de 'Otros'")
-    
-    # Aseguramos que dia_sel sea válido
-    lista_fechas = df_it_edit["Fecha"].tolist()
-    dia_sel = st.selectbox("Día para detallar:", lista_fechas)
-    
-    # Filtramos los detalles del día
-    det_dia = df_detalles[df_detalles["Fecha"] == dia_sel].drop(columns=["Fecha"]).reset_index(drop=True)
-    
-    # FUERZA BRUTA: Si la tabla está vacía, aseguramos las columnas para que no de ValueError
-    for col in ["Categoría/Descripción", "Monto $", "Pagado"]:
-        if col not in det_dia.columns:
-            det_dia[col] = False if col == "Pagado" else (0.0 if "$" in col else "")
+# --- LÓGICA DE DETALLES (REVISADA) ---
+st.markdown("---")
+st.subheader("🕵️ Desglose de 'Otros'")
 
-    # Editor de detalles
-    det_edit = st.data_editor(
-        det_dia, 
-        num_rows="dynamic", 
-        width="stretch", 
-        hide_index=True,
-        key=f"ed_{dia_sel}"
-    )
+lista_fechas = df_it_edit["Fecha"].tolist()
+dia_sel = st.selectbox("Día para detallar:", lista_fechas)
+
+# Filtramos y limpiamos nombres para que SQL no llore
+det_dia = df_detalles[df_detalles["Fecha"] == dia_sel].drop(columns=["Fecha"], errors='ignore').reset_index(drop=True)
+
+# Configuramos nombres visuales bonitos
+config_det = {
+    "Categoria": st.column_config.TextColumn("Categoría/Descripción"),
+    "Monto": st.column_config.NumberColumn("Monto $", format="$ %.2f"),
+    "Pagado": st.column_config.CheckboxColumn("¿Pagado?")
+}
+
+# Si la tabla está vacía, le damos la estructura técnica
+if det_dia.empty:
+    det_dia = pd.DataFrame(columns=["Categoria", "Monto", "Pagado"])
+
+det_edit = st.data_editor(
+    det_dia, 
+    num_rows="dynamic", 
+    width="stretch", 
+    hide_index=True,
+    column_config=config_det, # Esto hace la magia visual
+    key=f"ed_{dia_sel}"
+)
+
+if not det_edit.equals(det_dia):
+    # 1. Reconstruimos el DataFrame con nombres técnicos
+    df_detalles_nuevo = pd.concat([
+        df_detalles[df_detalles["Fecha"] != dia_sel], 
+        det_edit.assign(Fecha=dia_sel)
+    ], ignore_index=True)
     
-    if not det_edit.equals(det_dia):
-        # 1. Reconstruir el DataFrame completo de detalles
-        df_detalles_nuevo = pd.concat([df_detalles[df_detalles["Fecha"] != dia_sel], det_edit.assign(Fecha=dia_sel)], ignore_index=True)
-        
-        # 2. Guardar en Google
-        guardar_datos_sql(df_detalles_nuevo, "Detalles_Otros")
-        
-        # 3. ACTUALIZACIÓN SEGURA DEL TOTAL (Aquí es donde daba el error)
-        # Verificamos que existan datos antes de sumar
-        if not det_edit.empty and "Pagado" in det_edit.columns:
-            # Forzamos que Pagado sea booleano para evitar el ValueError
-            det_edit["Pagado"] = det_edit["Pagado"].astype(bool)
-            total_pagado_dia = det_edit.loc[det_edit["Pagado"] == True, "Monto $"].sum()
-        else:
-            total_pagado_dia = 0.0
-            
-        df_it_edit.loc[df_it_edit["Fecha"] == dia_sel, "Otros_Monto"] = total_pagado_dia
-        guardar_datos_sql(df_it_edit, "Itinerario")
-        st.rerun()
+    # 2. Guardamos con el nombre de tabla en minúsculas (más seguro)
+    guardar_datos_sql(df_detalles_nuevo, "detalles_otros")
+    
+    # 3. Calculamos el total para actualizar la tabla principal
+    total_dia = det_edit.loc[det_edit["Pagado"] == True, "Monto"].sum() if "Pagado" in det_edit.columns else 0.0
+    
+    # IMPORTANTE: Asegúrate de que el nombre aquí coincida con el de tu df_it_edit (ej: "Otros_Monto")
+    df_it_edit.loc[df_it_edit["Fecha"] == dia_sel, "Otros_Monto"] = total_dia
+    guardar_datos_sql(df_it_edit, "itinerario")
+    st.rerun()
 
 with t2:
     st.subheader("Gastos Globales")
