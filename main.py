@@ -17,21 +17,30 @@ import sqlite3
 # --- 1. CONFIGURACIÓN DE BASE DE DATOS ---
 DB_NAME = "viaje_europa_2026.db"
 
+if os.path.exists(DB_NAME): os.remove(DB_NAME) # Borra esto tras la primera ejecución
+init_db()
+
 def init_db():
-    """Crea las tablas si no existen al iniciar la app"""
     conn = sqlite3.connect(DB_NAME)
     c = conn.cursor()
-    # Tabla Itinerario
+    # Tabla Itinerario con los nombres EXACTOS que espera tu código
     c.execute('''CREATE TABLE IF NOT EXISTS itinerario
-                 (id INTEGER PRIMARY KEY AUTOINCREMENT, fecha TEXT, pais TEXT, ciudad TEXT, 
-                  traslado_monto REAL, traslado_pago INTEGER, aloj_monto REAL, aloj_pago INTEGER, 
-                  comida_monto REAL, comida_pago INTEGER, otros_monto REAL, notas TEXT)''')
+                 (id INTEGER PRIMARY KEY AUTOINCREMENT, 
+                  "Fecha" TEXT, "País" TEXT, "Ciudad" TEXT, 
+                  "Traslado $" REAL, "P. Traslado" INTEGER, 
+                  "Aloj. $" REAL, "P. Aloj" INTEGER, 
+                  "Comida $" REAL, "P. Comida" INTEGER, 
+                  "Otros $" REAL, "Notas" TEXT)''')
+    
     # Tabla Globales
     c.execute('''CREATE TABLE IF NOT EXISTS globales
-                 (id INTEGER PRIMARY KEY AUTOINCREMENT, pagado INTEGER, descripcion TEXT, monto REAL)''')
+                 (id INTEGER PRIMARY KEY AUTOINCREMENT, 
+                  "Pagado" INTEGER, "Descripción" TEXT, "Monto $" REAL)''')
+    
     # Tabla Detalles Otros
     c.execute('''CREATE TABLE IF NOT EXISTS detalles_otros
-                 (id INTEGER PRIMARY KEY AUTOINCREMENT, fecha TEXT, descripcion TEXT, monto REAL, pagado INTEGER)''')
+                 (id INTEGER PRIMARY KEY AUTOINCREMENT, 
+                  "Fecha" TEXT, "Categoría/Descripción" TEXT, "Monto $" REAL, "Pagado" INTEGER)''')
     conn.commit()
     conn.close()
 
