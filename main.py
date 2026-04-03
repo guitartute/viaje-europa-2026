@@ -17,8 +17,6 @@ if not os.path.exists(FOLDER_ADJUNTOS):
 DB_NAME = "viaje_europa_2026.db"
 
 if os.path.exists(DB_NAME): os.remove(DB_NAME) # Borra esto tras la primera ejecución
-    
-init_db()
 
 def init_db():
     conn = sqlite3.connect(DB_NAME)
