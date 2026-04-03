@@ -16,12 +16,10 @@ if not os.path.exists(FOLDER_ADJUNTOS):
 # --- 1. CONFIGURACIÓN DE BASE DE DATOS ---
 DB_NAME = "viaje_europa_2026.db"
 
-if os.path.exists(DB_NAME): os.remove(DB_NAME) # Borra esto tras la primera ejecución
-
 def init_db():
     conn = sqlite3.connect(DB_NAME)
     c = conn.cursor()
-    # Tabla Itinerario con los nombres EXACTOS que espera tu código
+    # Usamos comillas dobles para que SQLite acepte espacios y símbolos de $
     c.execute('''CREATE TABLE IF NOT EXISTS itinerario
                  (id INTEGER PRIMARY KEY AUTOINCREMENT, 
                   "Fecha" TEXT, "País" TEXT, "Ciudad" TEXT, 
@@ -30,17 +28,32 @@ def init_db():
                   "Comida $" REAL, "P. Comida" INTEGER, 
                   "Otros $" REAL, "Notas" TEXT)''')
     
-    # Tabla Globales
     c.execute('''CREATE TABLE IF NOT EXISTS globales
                  (id INTEGER PRIMARY KEY AUTOINCREMENT, 
                   "Pagado" INTEGER, "Descripción" TEXT, "Monto $" REAL)''')
     
-    # Tabla Detalles Otros
     c.execute('''CREATE TABLE IF NOT EXISTS detalles_otros
                  (id INTEGER PRIMARY KEY AUTOINCREMENT, 
                   "Fecha" TEXT, "Categoría/Descripción" TEXT, "Monto $" REAL, "Pagado" INTEGER)''')
     conn.commit()
     conn.close()
+
+# --- 2. VERIFICACIÓN CRÍTICA ---
+try:
+    init_db()
+    df_it = cargar_datos_sql("itinerario")
+    # Si la tabla existe pero no tiene la columna "Traslado $", forzamos reinicio
+    if not df_it.empty and "Traslado $" not in df_it.columns:
+        raise Exception("Estructura antigua detectada")
+except:
+    if os.path.exists(DB_NAME):
+        os.remove(DB_NAME) # Borramos el archivo viejo
+    init_db() # Creamos la nueva estructura limpia
+    df_it = cargar_datos_sql("itinerario")
+
+# --- 3. CARGA DE RESTO DE DATOS ---
+df_gl = cargar_datos_sql("globales")
+df_detalles = cargar_datos_sql("detalles_otros")
 
 # Inicializamos la DB al cargar la app
 init_db()
