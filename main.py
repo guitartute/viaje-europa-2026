@@ -5,6 +5,7 @@ import pydeck as pdk
 from datetime import datetime, timedelta
 from geopy.geocoders import Nominatim
 from streamlit_gsheets import GSheetsConnection
+import sqlite3
 
 # --- 1. CONFIGURACIÓN ---
 st.set_page_config(page_title="Europa 2026 Pro", layout="wide")
@@ -12,12 +13,11 @@ FOLDER_ADJUNTOS = "mis_adjuntos"
 if not os.path.exists(FOLDER_ADJUNTOS):
     os.makedirs(FOLDER_ADJUNTOS)
 
-import sqlite3
-
 # --- 1. CONFIGURACIÓN DE BASE DE DATOS ---
 DB_NAME = "viaje_europa_2026.db"
 
 if os.path.exists(DB_NAME): os.remove(DB_NAME) # Borra esto tras la primera ejecución
+    
 init_db()
 
 def init_db():
