@@ -12,47 +12,46 @@ FOLDER_ADJUNTOS = "mis_adjuntos"
 if not os.path.exists(FOLDER_ADJUNTOS):
     os.makedirs(FOLDER_ADJUNTOS)
 
-# --- CONEXIÓN ---
-conn = st.connection("gsheets", type=GSheetsConnection)
+import sqlite3
 
-# DEPUREMOS DE FORMA MÁS SIMPLE
-if "connections" not in st.secrets:
-    st.error("❌ Streamlit no encuentra la sección [connections] en los Secrets.")
-elif "gsheets" not in st.secrets.connections:
-    st.error("❌ Streamlit no encuentra la sección [gsheets] dentro de connections.")
-elif "private_key" not in st.secrets.connections.gsheets:
-    st.error("❌ Streamlit encuentra gsheets pero NO la private_key.")
-else:
-    st.success("✅ ¡Credenciales detectadas correctamente!")
+# --- 1. CONFIGURACIÓN DE BASE DE DATOS ---
+DB_NAME = "viaje_europa_2026.db"
 
-@st.cache_data(ttl=10) # Bajamos el TTL a 10 segundos para pruebas
-def cargar_datos(nombre_hoja):
-    try:
-        # Intentamos leer la hoja
-        df = conn.read(worksheet=nombre_hoja, ttl="0")
-        if df is None: return pd.DataFrame()
-        return df
-    except Exception as e:
-        # Si da 404, devolvemos el esquema vacío para que la App no explote
-        columnas = {
-            "Itinerario": ["Fecha", "País", "Ciudad", "Traslado $", "P. Traslado", "Aloj. $", "P. Aloj", "Comida $", "P. Comida", "Otros $", "Notas"],
-            "Globales": ["Pagado", "Descripción", "Monto $"],
-            "Detalles_Otros": ["Fecha", "Categoría/Descripción", "Monto $", "Pagado"]
-        }
-        return pd.DataFrame(columns=columnas.get(nombre_hoja, []))
+def init_db():
+    """Crea las tablas si no existen al iniciar la app"""
+    conn = sqlite3.connect(DB_NAME)
+    c = conn.cursor()
+    # Tabla Itinerario
+    c.execute('''CREATE TABLE IF NOT EXISTS itinerario
+                 (id INTEGER PRIMARY KEY AUTOINCREMENT, fecha TEXT, pais TEXT, ciudad TEXT, 
+                  traslado_monto REAL, traslado_pago INTEGER, aloj_monto REAL, aloj_pago INTEGER, 
+                  comida_monto REAL, comida_pago INTEGER, otros_monto REAL, notas TEXT)''')
+    # Tabla Globales
+    c.execute('''CREATE TABLE IF NOT EXISTS globales
+                 (id INTEGER PRIMARY KEY AUTOINCREMENT, pagado INTEGER, descripcion TEXT, monto REAL)''')
+    # Tabla Detalles Otros
+    c.execute('''CREATE TABLE IF NOT EXISTS detalles_otros
+                 (id INTEGER PRIMARY KEY AUTOINCREMENT, fecha TEXT, descripcion TEXT, monto REAL, pagado INTEGER)''')
+    conn.commit()
+    conn.close()
 
-def guardar_en_google(df, nombre_hoja):
-    try:
-        # Forzamos que los datos sean compatibles con JSON
-        df_save = df.fillna("")
-        conn.update(worksheet=nombre_hoja, data=df_save)
-        st.cache_data.clear() # Limpiamos caché solo tras un guardado exitoso
-        st.toast(f"✅ Guardado en {nombre_hoja}")
-    except Exception as e:
-        if "429" in str(e):
-            st.error("⏳ Google está saturado. Espera 1 minuto sin tocar nada.")
-        else:
-            st.error(f"❌ Error al guardar {nombre_hoja}: {e}")
+# Inicializamos la DB al cargar la app
+init_db()
+
+def cargar_datos_sql(tabla):
+    conn = sqlite3.connect(DB_NAME)
+    df = pd.read_sql_query(f"SELECT * FROM {tabla}", conn)
+    conn.close()
+    if 'id' in df.columns: df = df.drop(columns=['id'])
+    return df
+
+def guardar_datos_sql(df, tabla):
+    conn = sqlite3.connect(DB_NAME)
+    # Reemplazamos la tabla completa con el nuevo DataFrame
+    df.to_sql(tabla, conn, if_exists='replace', index=False)
+    conn.commit()
+    conn.close()
+    st.toast(f"✅ Guardado en base de datos interna ({tabla})")
 @st.cache_data
 def obtener_coordenadas(ciudad, pais):
     try:
@@ -61,10 +60,17 @@ def obtener_coordenadas(ciudad, pais):
         if location: return [location.latitude, location.longitude]
     except: return None
 
-# --- 3. INICIALIZACIÓN DE DATOS (Corregido) ---
-df_it = cargar_datos("Itinerario")
-df_gl = cargar_datos("Globales")
-df_detalles = cargar_datos("Detalles_Otros")
+# --- 3. INICIALIZACIÓN ---
+df_it = cargar_datos_sql("itinerario")
+df_gl = cargar_datos_sql("globales")
+df_detalles = cargar_datos_sql("detalles_otros")
+
+# Si las tablas están vacías (primera vez), creamos esquemas vacíos
+if df_it.empty:
+    df_it = pd.DataFrame(columns=["fecha", "pais", "ciudad", "traslado_monto", "traslado_pago", 
+                                   "aloj_monto", "aloj_pago", "comida_monto", "comida_pago", "otros_monto", "notas"])
+if df_gl.empty:
+    df_gl = pd.DataFrame(columns=["pagado", "descripcion", "monto"])
 
 # Limpieza de tipos para evitar errores de cálculo
 for df in [df_it, df_gl, df_detalles]:
@@ -77,6 +83,26 @@ for c in ["P. Traslado", "P. Aloj", "P. Comida"]:
     df_it[c] = df_it[c].astype(bool)
 
 # --- 4. CÁLCULOS Y SIDEBAR ---
+st.sidebar.markdown("---")
+st.sidebar.subheader("📦 Gestión de Datos")
+
+# Botón para descargar todo como un archivo SQLite (Backup real)
+with open(DB_NAME, "rb") as f:
+    st.sidebar.download_button(
+        label="📥 Descargar Backup (.db)",
+        data=f,
+        file_name="backup_viaje.db",
+        mime="application/x-sqlite3"
+    )
+
+# Botón para subir un backup previo
+uploaded_db = st.sidebar.file_uploader("📤 Restaurar Backup", type="db")
+if uploaded_db:
+    with open(DB_NAME, "wb") as f:
+        f.write(uploaded_db.getbuffer())
+    st.sidebar.success("Base de datos restaurada. Recargando...")
+    st.rerun()
+
 st.sidebar.header("⚙️ Configuración")
 f_ini = st.sidebar.date_input("Inicio", datetime.now())
 f_fin = st.sidebar.date_input("Fin", datetime.now() + timedelta(days=7))
