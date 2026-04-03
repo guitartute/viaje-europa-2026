@@ -15,6 +15,8 @@ if not os.path.exists(FOLDER_ADJUNTOS):
 
 # --- 1. CONFIGURACIÓN DE BASE DE DATOS ---
 DB_NAME = "viaje_europa_2026.db"
+if os.path.exists(DB_NAME):
+    os.remove(DB_NAME) # Borra esta línea después de que la app cargue bien una vez
 
 def init_db():
     conn = sqlite3.connect(DB_NAME)
@@ -25,15 +27,15 @@ def init_db():
         CREATE TABLE IF NOT EXISTS itinerario (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             "Fecha" TEXT,
-            "País" TEXT,
+            "Pais" TEXT,
             "Ciudad" TEXT,
-            "Traslado $" REAL,
-            "P. Traslado" INTEGER,
-            "Aloj. $" REAL,
-            "P. Aloj" INTEGER,
-            "Comida $" REAL,
-            "P. Comida" INTEGER,
-            "Otros $" REAL,
+            "Traslado_Monto" REAL,
+            "Traslado_Pago" INTEGER,
+            "Aloj_Monto" REAL,
+            "Aloj_Pago" INTEGER,
+            "Comida_Monto" REAL,
+            "Comida_Pago" INTEGER,
+            "Otros_Monto" REAL,
             "Notas" TEXT
         )
     ''')
@@ -67,7 +69,7 @@ if os.path.exists(DB_NAME):
     try:
         # Intentamos ver si la base de datos está sana
         conn = sqlite3.connect(DB_NAME)
-        pd.read_sql_query("SELECT \"Traslado $\" FROM itinerario LIMIT 1", conn)
+        pd.read_sql_query("SELECT \"Traslado_Monto\" FROM itinerario LIMIT 1", conn)
         conn.close()
     except:
         # Si da error, la borramos sin piedad para resetear
@@ -119,11 +121,11 @@ for df in [df_it, df_gl, df_detalles]:
     if "Monto $" in df.columns: df["Monto $"] = pd.to_numeric(df["Monto $"], errors='coerce').fillna(0.0)
     if "Pagado" in df.columns: df["Pagado"] = df["Pagado"].astype(bool)
 # Limpieza de tipos segura
-for c in ["Traslado $", "Aloj. $", "Comida $", "Otros $"]:
+for c in ["Traslado_Monto", "Aloj_Monto", "Comida_Monto", "Otros_Monto"]:
     if c in df_it.columns: # <--- AGREGAR ESTO
         df_it[c] = pd.to_numeric(df_it[c], errors='coerce').fillna(0.0)
 
-for c in ["P. Traslado", "P. Aloj", "P. Comida"]:
+for c in ["Traslado_Pago", "Aloj_Pago", "Comida_Pago"]:
     if c in df_it.columns: # <--- AGREGAR ESTO
         df_it[c] = df_it[c].astype(bool)
 
@@ -153,24 +155,31 @@ f_ini = st.sidebar.date_input("Inicio", datetime.now())
 f_fin = st.sidebar.date_input("Fin", datetime.now() + timedelta(days=7))
 
 if st.sidebar.button("Reiniciar Itinerario"):
-    with st.spinner("Comunicando con Google..."):
+    with st.spinner("Creando itinerario..."):
         dias = (f_fin - f_ini).days + 1
         nuevas_filas = []
         for i in range(dias):
             fecha_str = (f_ini + timedelta(days=i)).strftime("%d/%m (%a)")
+            # USAMOS NOMBRES LIMPIOS SIN ESPACIOS NI $
             nuevas_filas.append({
-                "Fecha": fecha_str, "País": "", "Ciudad": "", 
-                "Traslado $": 0.0, "P. Traslado": False, 
-                "Aloj. $": 0.0, "P. Aloj": False, 
-                "Comida $": 0.0, "P. Comida": False, 
-                "Otros $": 0.0, "Notas": ""
+                "Fecha": fecha_str, 
+                "Pais": "", 
+                "Ciudad": "", 
+                "Traslado_Monto": 0.0, 
+                "Traslado_Pago": False, 
+                "Aloj_Monto": 0.0, 
+                "Aloj_Pago": False, 
+                "Comida_Monto": 0.0, 
+                "Comida_Pago": False, 
+                "Otros_Monto": 0.0, 
+                "Notas": ""
             })
         
         df_it_nuevo = pd.DataFrame(nuevas_filas)
-        guardar_datos_sql(df_it_nuevo, "Itinerario")
-        st.success("Itinerario creado con éxito.")
-        # No hacemos rerun instantáneo para dejar que Google procese
-        st.info("Por favor, refresca la página manualmente en 5 segundos.")
+        # IMPORTANTE: El nombre de la tabla en minúsculas para coincidir con init_db
+        guardar_datos_sql(df_it_nuevo, "itinerario") 
+        st.success("¡Itinerario creado!")
+        st.rerun()
 
 # Lógica de Totales (Corregida)
 plan_base = df_it["Traslado_Monto"].sum() + df_it["Aloj_Monto"].sum() + df_it["Comida_Monto"].sum()
@@ -191,15 +200,15 @@ st.sidebar.metric("Pendiente", f"$ {total_plan - total_pag:,.2f}")
 t1, t2, t3, t4 = st.tabs(["📅 Itinerario", "🎒 Globales", "📂 Adjuntos", "📍 Mapa"])
 
 with t1:
-    # Configuramos nombres bonitos para que tú veas "Traslado $" pero el código use "Traslado_Monto"
+    # Configuramos nombres bonitos para que tú veas "Traslado_Monto" pero el código use "Traslado_Monto"
     config_it = {
-        "Traslado_Monto": st.column_config.NumberColumn("Traslado $", format="$ %.2f"),
-        "Traslado_Pago": st.column_config.CheckboxColumn("P. Traslado"),
-        "Aloj_Monto": st.column_config.NumberColumn("Aloj. $", format="$ %.2f"),
-        "Aloj_Pago": st.column_config.CheckboxColumn("P. Aloj"),
-        "Comida_Monto": st.column_config.NumberColumn("Comida $", format="$ %.2f"),
-        "Comida_Pago": st.column_config.CheckboxColumn("P. Comida"),
-        "Otros_Monto": st.column_config.NumberColumn("Otros $", format="$ %.2f", disabled=True)
+        "Traslado_Monto": st.column_config.NumberColumn("Traslado_Monto", format="$ %.2f"),
+        "Traslado_Pago": st.column_config.CheckboxColumn("Traslado_Pago"),
+        "Aloj_Monto": st.column_config.NumberColumn("Aloj_Monto", format="$ %.2f"),
+        "Aloj_Pago": st.column_config.CheckboxColumn("Aloj_Pago"),
+        "Comida_Monto": st.column_config.NumberColumn("Comida_Monto", format="$ %.2f"),
+        "Comida_Pago": st.column_config.CheckboxColumn("Comida_Pago"),
+        "Otros_Monto": st.column_config.NumberColumn("Otros_Monto", format="$ %.2f", disabled=True)
     }
     
     df_it_edit = st.data_editor(df_it, num_rows="dynamic", width="stretch", 
@@ -250,7 +259,7 @@ with t1:
         else:
             total_pagado_dia = 0.0
             
-        df_it_edit.loc[df_it_edit["Fecha"] == dia_sel, "Otros $"] = total_pagado_dia
+        df_it_edit.loc[df_it_edit["Fecha"] == dia_sel, "Otros_Monto"] = total_pagado_dia
         guardar_datos_sql(df_it_edit, "Itinerario")
         st.rerun()
 
