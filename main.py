@@ -25,14 +25,15 @@ elif "private_key" not in st.secrets.connections.gsheets:
 else:
     st.success("✅ ¡Credenciales detectadas correctamente!")
 
-@st.cache_data(ttl=300) # Caché de 5 minutos
+@st.cache_data(ttl=10) # Bajamos el TTL a 10 segundos para pruebas
 def cargar_datos(nombre_hoja):
     try:
-        # Intentamos leer. Si falla, el caché evitará reintentos constantes
-        df = conn.read(worksheet=nombre_hoja, ttl="5m")
+        # Intentamos leer la hoja
+        df = conn.read(worksheet=nombre_hoja, ttl="0")
+        if df is None: return pd.DataFrame()
         return df
     except Exception as e:
-        # Si no la encuentra, devolvemos un DataFrame con columnas pero NO guardamos nada aún
+        # Si da 404, devolvemos el esquema vacío para que la App no explote
         columnas = {
             "Itinerario": ["Fecha", "País", "Ciudad", "Traslado $", "P. Traslado", "Aloj. $", "P. Aloj", "Comida $", "P. Comida", "Otros $", "Notas"],
             "Globales": ["Pagado", "Descripción", "Monto $"],
