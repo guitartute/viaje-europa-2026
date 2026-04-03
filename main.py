@@ -19,44 +19,63 @@ DB_NAME = "viaje_europa_2026.db"
 def init_db():
     conn = sqlite3.connect(DB_NAME)
     c = conn.cursor()
-    # Usamos comillas dobles para que SQLite acepte espacios y símbolos de $
-    c.execute('''CREATE TABLE IF NOT EXISTS itinerario
-                 (id INTEGER PRIMARY KEY AUTOINCREMENT, 
-                  "Fecha" TEXT, "País" TEXT, "Ciudad" TEXT, 
-                  "Traslado $" REAL, "P. Traslado" INTEGER, 
-                  "Aloj. $" REAL, "P. Aloj" INTEGER, 
-                  "Comida $" REAL, "P. Comida" INTEGER, 
-                  "Otros $" REAL, "Notas" TEXT)''')
     
-    c.execute('''CREATE TABLE IF NOT EXISTS globales
-                 (id INTEGER PRIMARY KEY AUTOINCREMENT, 
-                  "Pagado" INTEGER, "Descripción" TEXT, "Monto $" REAL)''')
+    # Tabla Itinerario: Nombres entre comillas dobles para caracteres especiales
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS itinerario (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            "Fecha" TEXT,
+            "País" TEXT,
+            "Ciudad" TEXT,
+            "Traslado $" REAL,
+            "P. Traslado" INTEGER,
+            "Aloj. $" REAL,
+            "P. Aloj" INTEGER,
+            "Comida $" REAL,
+            "P. Comida" INTEGER,
+            "Otros $" REAL,
+            "Notas" TEXT
+        )
+    ''')
     
-    c.execute('''CREATE TABLE IF NOT EXISTS detalles_otros
-                 (id INTEGER PRIMARY KEY AUTOINCREMENT, 
-                  "Fecha" TEXT, "Categoría/Descripción" TEXT, "Monto $" REAL, "Pagado" INTEGER)''')
+    # Tabla Globales
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS globales (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            "Pagado" INTEGER,
+            "Descripción" TEXT,
+            "Monto $" REAL
+        )
+    ''')
+    
+    # Tabla Detalles Otros
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS detalles_otros (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            "Fecha" TEXT,
+            "Categoría/Descripción" TEXT,
+            "Monto $" REAL,
+            "Pagado" INTEGER
+        )
+    ''')
+    
     conn.commit()
     conn.close()
 
-# --- 2. VERIFICACIÓN CRÍTICA ---
-try:
-    init_db()
-    df_it = cargar_datos_sql("itinerario")
-    # Si la tabla existe pero no tiene la columna "Traslado $", forzamos reinicio
-    if not df_it.empty and "Traslado $" not in df_it.columns:
-        raise Exception("Estructura antigua detectada")
-except:
-    if os.path.exists(DB_NAME):
-        os.remove(DB_NAME) # Borramos el archivo viejo
-    init_db() # Creamos la nueva estructura limpia
-    df_it = cargar_datos_sql("itinerario")
+# --- INICIALIZACIÓN SEGURA ---
+if os.path.exists(DB_NAME):
+    try:
+        # Intentamos ver si la base de datos está sana
+        conn = sqlite3.connect(DB_NAME)
+        pd.read_sql_query("SELECT \"Traslado $\" FROM itinerario LIMIT 1", conn)
+        conn.close()
+    except:
+        # Si da error, la borramos sin piedad para resetear
+        conn.close()
+        os.remove(DB_NAME)
 
-# --- 3. CARGA DE RESTO DE DATOS ---
-df_gl = cargar_datos_sql("globales")
-df_detalles = cargar_datos_sql("detalles_otros")
+init_db() # Ahora sí, crea la estructura perfecta
 
-# Inicializamos la DB al cargar la app
-init_db()
 
 def cargar_datos_sql(tabla):
     conn = sqlite3.connect(DB_NAME)
