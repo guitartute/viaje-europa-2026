@@ -13,7 +13,7 @@ FOLDER_ADJUNTOS = "mis_adjuntos"
 if not os.path.exists(FOLDER_ADJUNTOS):
     os.makedirs(FOLDER_ADJUNTOS)
 
-DB_NAME = "viaje_europa_2026.db"
+DB_NAME = "viaje_europa_2026_2.db"
 
 def init_db():
     conn = sqlite3.connect(DB_NAME)
@@ -108,10 +108,19 @@ df_detalles = cargar_datos_sql("detalles_otros")
 cols_it = ["Fecha", "Pais", "Ciudad", "Traslado_Monto", "Traslado_Pago", 
            "Aloj_Monto", "Aloj_Pago", "Comida_Monto", "Comida_Pago", "Otros_Monto", "Notas"]
 
+# --- 3. INICIALIZACIÓN ---
 if df_it.empty:
-    df_it = pd.DataFrame(columns=cols_it)
+    df_it = pd.DataFrame(columns=[
+        "Fecha", "Pais", "Ciudad", "Traslado_Monto", "Traslado_Pago", 
+        "Aloj_Monto", "Aloj_Pago", "Comida_Monto", "Comida_Pago", "Otros_Monto", "Notas"
+    ])
+
 if df_gl.empty:
     df_gl = pd.DataFrame(columns=["Pagado", "Descripcion", "Monto"])
+
+if df_detalles.empty:
+    # AQUÍ ESTABA EL ERROR: Solo 3 columnas técnicas
+    df_detalles = pd.DataFrame(columns=["Fecha", "Categoria", "Monto", "Pagado"])
 
 # Limpieza de tipos para evitar errores de cálculo
 for df in [df_it, df_gl, df_detalles]:
@@ -215,51 +224,48 @@ with t1:
         guardar_datos_sql(df_it_edit, "itinerario")
         st.rerun()
 
-# --- LÓGICA DE DETALLES (REVISADA) ---
+# --- DENTRO DE WITH T1 ---
 st.markdown("---")
 st.subheader("🕵️ Desglose de 'Otros'")
 
 lista_fechas = df_it_edit["Fecha"].tolist()
 dia_sel = st.selectbox("Día para detallar:", lista_fechas)
 
-# Filtramos y limpiamos nombres para que SQL no llore
-det_dia = df_detalles[df_detalles["Fecha"] == dia_sel].drop(columns=["Fecha"], errors='ignore').reset_index(drop=True)
+# 1. Filtramos asegurando que solo traemos las 3 columnas de datos
+det_dia = df_detalles[df_detalles["Fecha"] == dia_sel][["Categoria", "Monto", "Pagado"]].reset_index(drop=True)
 
-# Configuramos nombres visuales bonitos
+# 2. Configuración visual (Traducción de nombres)
 config_det = {
     "Categoria": st.column_config.TextColumn("Categoría/Descripción"),
     "Monto": st.column_config.NumberColumn("Monto $", format="$ %.2f"),
     "Pagado": st.column_config.CheckboxColumn("¿Pagado?")
 }
 
-# Si la tabla está vacía, le damos la estructura técnica
-if det_dia.empty:
-    det_dia = pd.DataFrame(columns=["Categoria", "Monto", "Pagado"])
-
 det_edit = st.data_editor(
     det_dia, 
     num_rows="dynamic", 
     width="stretch", 
     hide_index=True,
-    column_config=config_det, # Esto hace la magia visual
+    column_config=config_det,
     key=f"ed_{dia_sel}"
 )
 
 if not det_edit.equals(det_dia):
-    # 1. Reconstruimos el DataFrame con nombres técnicos
-    df_detalles_nuevo = pd.concat([
-        df_detalles[df_detalles["Fecha"] != dia_sel], 
-        det_edit.assign(Fecha=dia_sel)
-    ], ignore_index=True)
+    # 3. Guardado limpio: Unimos el día editado con el resto
+    otros_dias = df_detalles[df_detalles["Fecha"] != dia_sel]
+    nuevo_dia = det_edit.copy()
+    nuevo_dia["Fecha"] = dia_sel # Asignamos la fecha al bloque editado
     
-    # 2. Guardamos con el nombre de tabla en minúsculas (más seguro)
+    df_detalles_nuevo = pd.concat([otros_dias, nuevo_dia], ignore_index=True)
     guardar_datos_sql(df_detalles_nuevo, "detalles_otros")
     
-    # 3. Calculamos el total para actualizar la tabla principal
-    total_dia = det_edit.loc[det_edit["Pagado"] == True, "Monto"].sum() if "Pagado" in det_edit.columns else 0.0
+    # 4. ACTUALIZACIÓN DEL TOTAL (Clave para que sume al itinerario)
+    # Solo sumamos lo que está marcado como "Pagado"
+    total_dia = det_edit.loc[det_edit["Pagado"] == True, "Monto"].sum()
     
-    # IMPORTANTE: Asegúrate de que el nombre aquí coincida con el de tu df_it_edit (ej: "Otros_Monto")
+    # Buscamos la fila del día en el itinerario y actualizamos
     df_it_edit.loc[df_it_edit["Fecha"] == dia_sel, "Otros_Monto"] = total_dia
+    
     guardar_datos_sql(df_it_edit, "itinerario")
     st.rerun()
 
