@@ -105,7 +105,7 @@ df_it = cargar_datos_sql("itinerario")
 df_gl = cargar_datos_sql("globales")
 df_detalles = cargar_datos_sql("detalles_otros")
 
-# Nombres técnicos para la base de datos (sin espacios ni $)
+# Nombres técnicos (los que usará el código internamente)
 cols_it = ["Fecha", "Pais", "Ciudad", "Traslado_Monto", "Traslado_Pago", 
            "Aloj_Monto", "Aloj_Pago", "Comida_Monto", "Comida_Pago", "Otros_Monto", "Notas"]
 
@@ -299,15 +299,24 @@ with t3:
 
 with t4:
     st.subheader("🗺️ Ruta")
-    df_m = df_it_edit[(df_it_edit["Ciudad"]!="") & (df_it_edit["País"]!="")].copy()
-    puntos = []
-    for _, r in df_m.iterrows():
-        c = obtener_coordenadas(r["Ciudad"], r["País"])
-        if c: puntos.append({"lat": c[0], "lon": c[1], "name": r["Ciudad"]})
-    
-    if len(puntos) >= 2:
-        df_p = pd.DataFrame(puntos)
-        rutas = [{"start": [puntos[i]["lon"], puntos[i]["lat"]], "end": [puntos[i+1]["lon"], puntos[i+1]["lat"]]} for i in range(len(puntos)-1)]
-        st.pydeck_chart(pdk.Deck(map_style='light', initial_view_state=pdk.ViewState(latitude=df_p["lat"].mean(), longitude=df_p["lon"].mean(), zoom=3, pitch=45),
-            layers=[pdk.Layer("ArcLayer", rutas, get_source_position="start", get_target_position="end", get_width=3),
-                    pdk.Layer("ScatterplotLayer", df_p, get_position="[lon, lat]", get_radius=20000, get_color="[200, 30, 0]")]))
+    # Verificamos que las columnas existan antes de filtrar
+    if "Ciudad" in df_it_edit.columns and "Pais" in df_it_edit.columns:
+        df_m = df_it_edit[(df_it_edit["Ciudad"] != "") & (df_it_edit["Pais"] != "")].copy()
+        puntos = []
+        for _, r in df_m.iterrows():
+            c = obtener_coordenadas(r["Ciudad"], r["Pais"])
+            if c: puntos.append({"lat": c[0], "lon": c[1], "name": r["Ciudad"]})
+        
+        if len(puntos) >= 2:
+            df_p = pd.DataFrame(puntos)
+            rutas = [{"start": [puntos[i]["lon"], puntos[i]["lat"]], "end": [puntos[i+1]["lon"], puntos[i+1]["lat"]]} for i in range(len(puntos)-1)]
+            st.pydeck_chart(pdk.Deck(
+                map_style='light', 
+                initial_view_state=pdk.ViewState(latitude=df_p["lat"].mean(), longitude=df_p["lon"].mean(), zoom=3, pitch=45),
+                layers=[
+                    pdk.Layer("ArcLayer", rutas, get_source_position="start", get_target_position="end", get_width=3, get_tilt=15),
+                    pdk.Layer("ScatterplotLayer", df_p, get_position="[lon, lat]", get_radius=20000, get_color="[200, 30, 0]")
+                ]
+            ))
+    else:
+        st.warning("Asegúrate de que las columnas 'Ciudad' y 'Pais' estén configuradas.")
