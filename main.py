@@ -15,8 +15,6 @@ if not os.path.exists(FOLDER_ADJUNTOS):
 
 # --- 1. CONFIGURACIÓN DE BASE DE DATOS ---
 DB_NAME = "viaje_europa_2026.db"
-if os.path.exists(DB_NAME):
-    os.remove(DB_NAME) # Borra esta línea después de que la app cargue bien una vez
 
 def init_db():
     conn = sqlite3.connect(DB_NAME)
