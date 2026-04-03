@@ -74,7 +74,7 @@ if os.path.exists(DB_NAME):
         conn.close()
         os.remove(DB_NAME)
 
-if os.path.exists(DB_NAME): os.remove(DB_NAME)
+
 init_db() # Ahora sí, crea la estructura perfecta
 
 
