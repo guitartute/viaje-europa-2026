@@ -74,6 +74,7 @@ if os.path.exists(DB_NAME):
         conn.close()
         os.remove(DB_NAME)
 
+if os.path.exists(DB_NAME): os.remove(DB_NAME)
 init_db() # Ahora sí, crea la estructura perfecta
 
 
@@ -104,14 +105,14 @@ df_it = cargar_datos_sql("itinerario")
 df_gl = cargar_datos_sql("globales")
 df_detalles = cargar_datos_sql("detalles_otros")
 
-# Si las tablas están vacías (primera vez), creamos esquemas vacíos con nombres correctos
+# Nombres técnicos para la base de datos (sin espacios ni $)
+cols_it = ["Fecha", "Pais", "Ciudad", "Traslado_Monto", "Traslado_Pago", 
+           "Aloj_Monto", "Aloj_Pago", "Comida_Monto", "Comida_Pago", "Otros_Monto", "Notas"]
+
 if df_it.empty:
-    df_it = pd.DataFrame(columns=[
-        "Fecha", "País", "Ciudad", "Traslado $", "P. Traslado", 
-        "Aloj. $", "P. Aloj", "Comida $", "P. Comida", "Otros $", "Notas"
-    ])
+    df_it = pd.DataFrame(columns=cols_it)
 if df_gl.empty:
-    df_gl = pd.DataFrame(columns=["Pagado", "Descripción", "Monto $"])
+    df_gl = pd.DataFrame(columns=["Pagado", "Descripcion", "Monto"])
 
 # Limpieza de tipos para evitar errores de cálculo
 for df in [df_it, df_gl, df_detalles]:
@@ -171,10 +172,16 @@ if st.sidebar.button("Reiniciar Itinerario"):
         # No hacemos rerun instantáneo para dejar que Google procese
         st.info("Por favor, refresca la página manualmente en 5 segundos.")
 
-# Lógica de Totales
-total_plan = df_it[["Traslado $", "Aloj. $", "Comida $"]].sum().sum() + df_detalles["Monto $"].sum() + df_gl["Monto $"].sum()
-pag_it = df_it.loc[df_it["P. Traslado"], "Traslado $"].sum() + df_it.loc[df_it["P. Aloj"], "Aloj. $"].sum() + df_it.loc[df_it["P. Comida"], "Comida $"].sum()
-total_pag = pag_it + df_it["Otros $"].sum() + df_gl.loc[df_gl["Pagado"], "Monto $"].sum()
+# Lógica de Totales (Corregida)
+plan_base = df_it["Traslado_Monto"].sum() + df_it["Aloj_Monto"].sum() + df_it["Comida_Monto"].sum()
+plan_otros = df_detalles["Monto"].sum() if not df_detalles.empty else 0
+plan_global = df_gl["Monto"].sum() if not df_gl.empty else 0
+total_plan = plan_base + plan_otros + plan_global
+
+pag_base = (df_it.loc[df_it["Traslado_Pago"] == True, "Traslado_Monto"].sum() + 
+            df_it.loc[df_it["Aloj_Pago"] == True, "Aloj_Monto"].sum() + 
+            df_it.loc[df_it["Comida_Pago"] == True, "Comida_Monto"].sum())
+total_pag = pag_base + df_it["Otros_Monto"].sum() + (df_gl.loc[df_gl["Pagado"] == True, "Monto"].sum() if not df_gl.empty else 0)
 
 st.sidebar.metric("Presupuesto Total", f"$ {total_plan:,.2f}")
 st.sidebar.metric("Ya Pagado", f"$ {total_pag:,.2f}")
@@ -184,9 +191,23 @@ st.sidebar.metric("Pendiente", f"$ {total_plan - total_pag:,.2f}")
 t1, t2, t3, t4 = st.tabs(["📅 Itinerario", "🎒 Globales", "📂 Adjuntos", "📍 Mapa"])
 
 with t1:
-    df_it_edit = st.data_editor(df_it, num_rows="dynamic", width="stretch", hide_index=True)
+    # Configuramos nombres bonitos para que tú veas "Traslado $" pero el código use "Traslado_Monto"
+    config_it = {
+        "Traslado_Monto": st.column_config.NumberColumn("Traslado $", format="$ %.2f"),
+        "Traslado_Pago": st.column_config.CheckboxColumn("P. Traslado"),
+        "Aloj_Monto": st.column_config.NumberColumn("Aloj. $", format="$ %.2f"),
+        "Aloj_Pago": st.column_config.CheckboxColumn("P. Aloj"),
+        "Comida_Monto": st.column_config.NumberColumn("Comida $", format="$ %.2f"),
+        "Comida_Pago": st.column_config.CheckboxColumn("P. Comida"),
+        "Otros_Monto": st.column_config.NumberColumn("Otros $", format="$ %.2f", disabled=True)
+    }
+    
+    df_it_edit = st.data_editor(df_it, num_rows="dynamic", width="stretch", 
+                                hide_index=True, column_config=config_it)
+    
     if not df_it_edit.equals(df_it):
-        guardar_datos_sql(df_it_edit, "Itinerario"); st.rerun()
+        guardar_datos_sql(df_it_edit, "itinerario")
+        st.rerun()
 
 # --- 1. LÓGICA DE PROTECCIÓN PARA DETALLES ---
     st.markdown("---")
