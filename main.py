@@ -104,22 +104,27 @@ df_it = cargar_datos_sql("itinerario")
 df_gl = cargar_datos_sql("globales")
 df_detalles = cargar_datos_sql("detalles_otros")
 
-# Si las tablas están vacías (primera vez), creamos esquemas vacíos
+# Si las tablas están vacías (primera vez), creamos esquemas vacíos con nombres correctos
 if df_it.empty:
-    df_it = pd.DataFrame(columns=["fecha", "pais", "ciudad", "traslado_monto", "traslado_pago", 
-                                   "aloj_monto", "aloj_pago", "comida_monto", "comida_pago", "otros_monto", "notas"])
+    df_it = pd.DataFrame(columns=[
+        "Fecha", "País", "Ciudad", "Traslado $", "P. Traslado", 
+        "Aloj. $", "P. Aloj", "Comida $", "P. Comida", "Otros $", "Notas"
+    ])
 if df_gl.empty:
-    df_gl = pd.DataFrame(columns=["pagado", "descripcion", "monto"])
+    df_gl = pd.DataFrame(columns=["Pagado", "Descripción", "Monto $"])
 
 # Limpieza de tipos para evitar errores de cálculo
 for df in [df_it, df_gl, df_detalles]:
     if "Monto $" in df.columns: df["Monto $"] = pd.to_numeric(df["Monto $"], errors='coerce').fillna(0.0)
     if "Pagado" in df.columns: df["Pagado"] = df["Pagado"].astype(bool)
-# (Repetir para las columnas específicas de df_it si es necesario)
+# Limpieza de tipos segura
 for c in ["Traslado $", "Aloj. $", "Comida $", "Otros $"]:
-    df_it[c] = pd.to_numeric(df_it[c], errors='coerce').fillna(0.0)
+    if c in df_it.columns: # <--- AGREGAR ESTO
+        df_it[c] = pd.to_numeric(df_it[c], errors='coerce').fillna(0.0)
+
 for c in ["P. Traslado", "P. Aloj", "P. Comida"]:
-    df_it[c] = df_it[c].astype(bool)
+    if c in df_it.columns: # <--- AGREGAR ESTO
+        df_it[c] = df_it[c].astype(bool)
 
 # --- 4. CÁLCULOS Y SIDEBAR ---
 st.sidebar.markdown("---")
@@ -161,7 +166,7 @@ if st.sidebar.button("Reiniciar Itinerario"):
             })
         
         df_it_nuevo = pd.DataFrame(nuevas_filas)
-        guardar_en_google(df_it_nuevo, "Itinerario")
+        guardar_datos_sql(df_it_nuevo, "Itinerario")
         st.success("Itinerario creado con éxito.")
         # No hacemos rerun instantáneo para dejar que Google procese
         st.info("Por favor, refresca la página manualmente en 5 segundos.")
@@ -181,7 +186,7 @@ t1, t2, t3, t4 = st.tabs(["📅 Itinerario", "🎒 Globales", "📂 Adjuntos", "
 with t1:
     df_it_edit = st.data_editor(df_it, num_rows="dynamic", width="stretch", hide_index=True)
     if not df_it_edit.equals(df_it):
-        guardar_en_google(df_it_edit, "Itinerario"); st.rerun()
+        guardar_datos_sql(df_it_edit, "Itinerario"); st.rerun()
 
 # --- 1. LÓGICA DE PROTECCIÓN PARA DETALLES ---
     st.markdown("---")
@@ -213,7 +218,7 @@ with t1:
         df_detalles_nuevo = pd.concat([df_detalles[df_detalles["Fecha"] != dia_sel], det_edit.assign(Fecha=dia_sel)], ignore_index=True)
         
         # 2. Guardar en Google
-        guardar_en_google(df_detalles_nuevo, "Detalles_Otros")
+        guardar_datos_sql(df_detalles_nuevo, "Detalles_Otros")
         
         # 3. ACTUALIZACIÓN SEGURA DEL TOTAL (Aquí es donde daba el error)
         # Verificamos que existan datos antes de sumar
@@ -225,14 +230,14 @@ with t1:
             total_pagado_dia = 0.0
             
         df_it_edit.loc[df_it_edit["Fecha"] == dia_sel, "Otros $"] = total_pagado_dia
-        guardar_en_google(df_it_edit, "Itinerario")
+        guardar_datos_sql(df_it_edit, "Itinerario")
         st.rerun()
 
 with t2:
     st.subheader("Gastos Globales")
     df_gl_edit = st.data_editor(df_gl, num_rows="dynamic", width="stretch", hide_index=True)
     if not df_gl_edit.equals(df_gl):
-        guardar_en_google(df_gl_edit, "Globales"); st.rerun()
+        guardar_datos_sql(df_gl_edit, "Globales"); st.rerun()
 
 with t3:
     st.info("La gestión de archivos adjuntos se guarda localmente en el servidor.")
