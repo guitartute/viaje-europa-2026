@@ -217,7 +217,7 @@ t1, t2, t3, t4 = st.tabs(["📅 Itinerario", "🎒 Globales", "📂 Adjuntos", "
 
 with t1:
     st.title("📅 EUROVIAJE NO CENSURADO 2026") # Título grande
-    dias_faltantes = (f_ini - datetime.now().date()).days
+    dias_faltantes = (datetime.now().date()).days - f_ini
     if dias_faltantes > 0:
         st.subheader(f"⏳ ¡Faltan {dias_faltantes} días para el despegue!")
     else:
