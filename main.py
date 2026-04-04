@@ -217,11 +217,21 @@ t1, t2, t3, t4 = st.tabs(["📅 Itinerario", "🎒 Globales", "📂 Adjuntos", "
 
 with t1:
     st.title("📅 EUROVIAJE NO CENSURADO 2026") # Título grande
-    dias_faltantes = (datetime.now().date()).days - f_ini
-    if dias_faltantes > 0:
-        st.subheader(f"⏳ ¡Faltan {dias_faltantes} días para el despegue!")
+    # --- CÁLCULO DE DÍAS FALTANTES ---
+    fecha_hoy = datetime.now().date()  # Obtenemos solo la fecha de hoy (sin horas)
+    
+    # f_ini suele ser un objeto 'date', así que comparamos date con date
+    if f_ini > fecha_hoy:
+        dias_faltantes = (f_ini - fecha_hoy).days
+        st.info(f"⏳ ¡Faltan **{dias_faltantes}** días para el despegue! (04 de Mayo)")
+    elif f_ini == fecha_hoy:
+        st.success("🎉 ¡El viaje comienza HOY! ¡Buen viaje!")
     else:
-        st.subheader("🎉 ¡El viaje ya comenzó!")
+        # Si la fecha de inicio ya pasó pero aún no termina el viaje
+        if f_fin >= fecha_hoy:
+            st.warning("🌍 ¡Ya estás en tu aventura europea!")
+        else:
+            st.error("🏁 El viaje ya ha finalizado.")
     
     config_it = {
         "Traslado_Monto": st.column_config.NumberColumn("Traslado $", format="$ %.2f"),
