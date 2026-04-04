@@ -217,8 +217,11 @@ t1, t2, t3, t4 = st.tabs(["📅 Itinerario", "🎒 Globales", "📂 Adjuntos", "
 
 with t1:
     st.title("📅 EUROVIAJE NO CENSURADO 2026") # Título grande
-    # O un subtítulo si prefieres algo más discreto:
-    st.header("Detalle de gastos diarios")
+    dias_faltantes = (f_ini - datetime.now().date()).days
+    if dias_faltantes > 0:
+        st.subheader(f"⏳ ¡Faltan {dias_faltantes} días para el despegue!")
+    else:
+        st.subheader("🎉 ¡El viaje ya comenzó!")
     
     config_it = {
         "Traslado_Monto": st.column_config.NumberColumn("Traslado $", format="$ %.2f"),
