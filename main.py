@@ -216,55 +216,51 @@ with st.sidebar.expander("📤 Restaurar Backup"):
 t1, t2, t3, t4 = st.tabs(["📅 Itinerario", "🎒 Globales", "📂 Adjuntos", "📍 Mapa"])
 
 with t1:
-    st.title("📅 EUROVIAJE NO CENSURADO 2026") # Título grande
-    # --- CÁLCULO DE TIEMPO RESTANTE (FECHA ACTUAL: 04/04/2026) ---
-    fecha_actual = datetime.now().date()
-    # f_ini es la fecha que elegiste (04/05/2026)
-    
-    # --- LÓGICA DE FECHAS AUTOMÁTICA ---
-    # Por defecto usamos hoy, por si la tabla está vacía
-    default_ini = datetime.now().date()
-    default_fin = datetime.now().date() + timedelta(days=7)
-    
-    if not df_it.empty:
-        try:
-            # 1. Tomamos el texto de la primera fila (ej: "04/05 (Mon)")
-            primera_fecha_str = df_it.iloc[0]["Fecha"] 
-            
-            # 2. Extraemos el día y el mes del texto "04/05"
-            # Esto asume que el formato es siempre DD/MM al principio
-            dia = int(primera_fecha_str[:2])
-            mes = int(primera_fecha_str[3:5])
-            
-            # 3. Construimos la fecha para el calendario (Asumimos 2026)
-            default_ini = datetime(2026, mes, dia).date()
-            
-            # 4. Hacemos lo mismo para la última fila para el fin del viaje
-            ultima_fecha_str = df_it.iloc[-1]["Fecha"]
-            dia_f = int(ultima_fecha_str[:2])
-            mes_f = int(ultima_fecha_str[3:5])
-            default_fin = datetime(2026, mes_f, dia_f).date()
-        except Exception as e:
-            # Si algo falla al leer el texto, volvemos a los valores por defecto
-            pass
+# --- 1. LÓGICA DE FECHAS AUTOMÁTICA (Calculamos los valores por defecto) ---
+default_ini = datetime.now().date()
+default_fin = datetime.now().date() + timedelta(days=7)
 
-    if f_ini > fecha_actual:
+if not df_it.empty:
+    try:
+        # Extraemos día y mes de la primera fila
+        primera_fecha_str = df_it.iloc[0]["Fecha"] 
+        dia = int(primera_fecha_str[:2])
+        mes = int(primera_fecha_str[3:5])
+        default_ini = datetime(2026, mes, dia).date()
+        
+        # Extraemos día y mes de la última fila
+        ultima_fecha_str = df_it.iloc[-1]["Fecha"]
+        dia_f = int(ultima_fecha_str[:2])
+        mes_f = int(ultima_fecha_str[3:5])
+        default_fin = datetime(2026, mes_f, dia_f).date()
+    except:
+        pass
+
+# --- 2. SIDEBAR (Aquí definimos f_ini y f_fin realmente) ---
+st.sidebar.header("⚙️ Configuración")
+f_ini = st.sidebar.date_input("Inicio", default_ini)
+f_fin = st.sidebar.date_input("Fin", default_fin)
+
+# --- 3. TÍTULO Y CONTADOR (Ahora sí podemos usar f_ini) ---
+st.title("📅 EUROVIAJE NO CENSURADO 2026")
+
+fecha_actual = datetime.now().date()
+
+if f_ini > fecha_actual:
     restante = f_ini - fecha_actual
     dias = restante.days
-    
-    # Usamos columnas para que se vea elegante en el sidebar o cabecera
     st.success(f"✈️ ¡Faltan **{dias}** días para tu viaje a Europa!")
     st.caption(f"Salida programada: {f_ini.strftime('%d/%m/%Y')}")
 
-    elif f_ini == fecha_actual:
-        st.balloons() # ¡Efecto de globos si es hoy!
-        st.success("🎉 ¡EL VIAJE COMIENZA HOY! ¡A disfrutar!")
-        
+elif f_ini == fecha_actual:
+    st.balloons()
+    st.success("🎉 ¡EL VIAJE COMIENZA HOY! ¡A disfrutar!")
+
+else:
+    if f_fin >= fecha_actual:
+        st.info("🌍 Actualmente estás en tu aventura europea.")
     else:
-        if f_fin >= fecha_actual:
-            st.info("🌍 Actualmente estás en tu aventura europea.")
-        else:
-            st.write("🏁 Este viaje ya ha finalizado.")
+        st.write("🏁 Este viaje ya ha finalizado.")
     
     # --- SIDEBAR ---
     st.sidebar.header("⚙️ Configuración")
