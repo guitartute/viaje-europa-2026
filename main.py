@@ -217,21 +217,27 @@ t1, t2, t3, t4 = st.tabs(["📅 Itinerario", "🎒 Globales", "📂 Adjuntos", "
 
 with t1:
     st.title("📅 EUROVIAJE NO CENSURADO 2026") # Título grande
-    # --- CÁLCULO DE DÍAS FALTANTES ---
-    fecha_hoy = datetime.now().date()  # Obtenemos solo la fecha de hoy (sin horas)
+    # --- CÁLCULO DE TIEMPO RESTANTE (FECHA ACTUAL: 04/04/2026) ---
+    fecha_actual = datetime.now().date()
+    # f_ini es la fecha que elegiste (04/05/2026)
     
-    # f_ini suele ser un objeto 'date', así que comparamos date con date
-    if f_ini > fecha_hoy:
-        dias_faltantes = (f_ini - fecha_hoy).days
-        st.info(f"⏳ ¡Faltan **{dias_faltantes}** días para el despegue! (04 de Mayo)")
-    elif f_ini == fecha_hoy:
-        st.success("🎉 ¡El viaje comienza HOY! ¡Buen viaje!")
+    if f_ini > fecha_actual:
+        restante = f_ini - fecha_actual
+        dias = restante.days
+        
+        # Usamos columnas para que se vea elegante en el sidebar o cabecera
+        st.success(f"✈️ ¡Faltan **{dias}** días para tu viaje a Europa!")
+        st.caption(f"Salida programada: {f_ini.strftime('%d/%m/%Y')}")
+    
+    elif f_ini == fecha_actual:
+        st.balloons() # ¡Efecto de globos si es hoy!
+        st.success("🎉 ¡EL VIAJE COMIENZA HOY! ¡A disfrutar!")
+        
     else:
-        # Si la fecha de inicio ya pasó pero aún no termina el viaje
-        if f_fin >= fecha_hoy:
-            st.warning("🌍 ¡Ya estás en tu aventura europea!")
+        if f_fin >= fecha_actual:
+            st.info("🌍 Actualmente estás en tu aventura europea.")
         else:
-            st.error("🏁 El viaje ya ha finalizado.")
+            st.write("🏁 Este viaje ya ha finalizado.")
     
     config_it = {
         "Traslado_Monto": st.column_config.NumberColumn("Traslado $", format="$ %.2f"),
