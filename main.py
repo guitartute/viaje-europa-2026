@@ -241,7 +241,7 @@ with t1:
 
 # --- DENTRO DE WITH T1 ---
 st.markdown("---")
-st.subheader("🕵️ Desglose de 'Otros'")
+st.subheader("🕵️ Detalle de Otros gastos")
 
 lista_fechas = df_it_edit["Fecha"].tolist()
 dia_sel = st.selectbox("Día para detallar:", lista_fechas)
