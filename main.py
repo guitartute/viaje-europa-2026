@@ -216,6 +216,10 @@ with st.sidebar.expander("📤 Restaurar Backup"):
 t1, t2, t3, t4 = st.tabs(["📅 Itinerario", "🎒 Globales", "📂 Adjuntos", "📍 Mapa"])
 
 with t1:
+    st.title("📅 EUROVIAJE NO CENSURADO 2026") # Título grande
+    # O un subtítulo si prefieres algo más discreto:
+    st.header("Detalle de gastos diarios")
+    
     config_it = {
         "Traslado_Monto": st.column_config.NumberColumn("Traslado $", format="$ %.2f"),
         "Traslado_Pago": st.column_config.CheckboxColumn("P. Traslado"),
