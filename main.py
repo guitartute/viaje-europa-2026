@@ -13,7 +13,7 @@ FOLDER_ADJUNTOS = "mis_adjuntos"
 if not os.path.exists(FOLDER_ADJUNTOS):
     os.makedirs(FOLDER_ADJUNTOS)
 
-DB_NAME = "viaje_europa_2026_3.db"
+DB_NAME = "viaje_europa_2026_4.db"
 
 def init_db():
     conn = sqlite3.connect(DB_NAME)
@@ -41,14 +41,14 @@ def init_db():
     c.execute('''CREATE TABLE IF NOT EXISTS globales 
                  (id INTEGER PRIMARY KEY AUTOINCREMENT, 
                   Pagado INTEGER, Descripcion TEXT, Monto REAL)''')
-    
-    # Tabla Detalles Otros
+
+    # Tabla Detalles Otros (Límpiala de símbolos)
     c.execute('''
         CREATE TABLE IF NOT EXISTS detalles_otros (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             "Fecha" TEXT,
-            "Categoría/Descripción" TEXT,
-            "Monto $" REAL,
+            "Categoria" TEXT,
+            "Monto" REAL,
             "Pagado" INTEGER
         )
     ''')
@@ -203,19 +203,27 @@ pag_global = df_gl.loc[df_gl["Pagado"] == True, "Monto"].sum() if not df_gl.empt
 
 total_pagado = pag_base + pag_otros + pag_global
 
+# --- MOSTRAR MÉTRICAS EN EL SIDEBAR ---
+st.sidebar.markdown("---")
+st.sidebar.subheader("💰 Resumen Financiero")
+st.sidebar.metric("Presupuesto Total", f"$ {total_plan:,.2f}")
+st.sidebar.metric("Ya Pagado", f"$ {total_pagado:,.2f}")
+st.sidebar.metric("Pendiente", f"$ {total_plan - total_pagado:,.2f}")
+
 # --- 5. TABS ---
 t1, t2, t3, t4 = st.tabs(["📅 Itinerario", "🎒 Globales", "📂 Adjuntos", "📍 Mapa"])
 
 with t1:
-    # Configuramos nombres bonitos para que tú veas "Traslado_Monto" pero el código use "Traslado_Monto"
     config_it = {
-        "Traslado_Monto": st.column_config.NumberColumn("Traslado_Monto", format="$ %.2f"),
-        "Traslado_Pago": st.column_config.CheckboxColumn("Traslado_Pago"),
-        "Aloj_Monto": st.column_config.NumberColumn("Aloj_Monto", format="$ %.2f"),
-        "Aloj_Pago": st.column_config.CheckboxColumn("Aloj_Pago"),
-        "Comida_Monto": st.column_config.NumberColumn("Comida_Monto", format="$ %.2f"),
-        "Comida_Pago": st.column_config.CheckboxColumn("Comida_Pago"),
-        "Otros_Monto": st.column_config.NumberColumn("Otros_Monto", format="$ %.2f", disabled=True)
+        "Traslado_Monto": st.column_config.NumberColumn("Traslado $", format="$ %.2f"),
+        "Traslado_Pago": st.column_config.CheckboxColumn("P. Traslado"),
+        "Aloj_Monto": st.column_config.NumberColumn("Aloj. $", format="$ %.2f"),
+        "Aloj_Pago": st.column_config.CheckboxColumn("P. Aloj"),
+        "Comida_Monto": st.column_config.NumberColumn("Comida $", format="$ %.2f"),
+        "Comida_Pago": st.column_config.CheckboxColumn("P. Comida"),
+        "Otros_Monto": st.column_config.NumberColumn("Otros (Pagado) $", format="$ %.2f", disabled=True),
+        "Pais": st.column_config.TextColumn("País"),
+        "Notas": st.column_config.TextColumn("Notas", width="large")
     }
     
     df_it_edit = st.data_editor(df_it, num_rows="dynamic", width="stretch", 
@@ -261,15 +269,17 @@ if not det_edit.equals(det_dia):
     guardar_datos_sql(df_detalles_nuevo, "detalles_otros")
     
     # 4. ACTUALIZACIÓN DEL TOTAL (Clave para que sume al itinerario)
-    # Solo sumamos lo que está marcado como "Pagado"
+    # Solo sumamos lo que está marcado como "Pagado" (Asegúrate que el nombre sea 'Pagado' y 'Monto')
     total_dia = det_edit.loc[det_edit["Pagado"] == True, "Monto"].sum()
     
-    # Buscamos la fila del día en el itinerario y actualizamos
+    # Actualizamos la columna del itinerario
     df_it_edit.loc[df_it_edit["Fecha"] == dia_sel, "Otros_Monto"] = total_dia
     
+    # Guardamos ambas tablas
+    guardar_datos_sql(df_detalles_nuevo, "detalles_otros")
     guardar_datos_sql(df_it_edit, "itinerario")
     st.rerun()
-
+    
 with t2:
     st.subheader("🎒 Gastos Globales")
     
