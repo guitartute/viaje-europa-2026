@@ -13,7 +13,7 @@ FOLDER_ADJUNTOS = "mis_adjuntos"
 if not os.path.exists(FOLDER_ADJUNTOS):
     os.makedirs(FOLDER_ADJUNTOS)
 
-DB_NAME = "viaje_europa_2026_2.db"
+DB_NAME = "viaje_europa_2026_3.db"
 
 def init_db():
     conn = sqlite3.connect(DB_NAME)
@@ -38,14 +38,9 @@ def init_db():
     ''')
     
     # Tabla Globales
-    c.execute('''
-        CREATE TABLE IF NOT EXISTS globales (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            "Pagado" INTEGER,
-            "Descripción" TEXT,
-            "Monto $" REAL
-        )
-    ''')
+    c.execute('''CREATE TABLE IF NOT EXISTS globales 
+                 (id INTEGER PRIMARY KEY AUTOINCREMENT, 
+                  Pagado INTEGER, Descripcion TEXT, Monto REAL)''')
     
     # Tabla Detalles Otros
     c.execute('''
@@ -187,20 +182,26 @@ if st.sidebar.button("Reiniciar Itinerario"):
         st.success("¡Itinerario creado!")
         st.rerun()
 
-# Lógica de Totales (Corregida)
-plan_base = df_it["Traslado_Monto"].sum() + df_it["Aloj_Monto"].sum() + df_it["Comida_Monto"].sum()
-plan_otros = df_detalles["Monto"].sum() if not df_detalles.empty else 0
-plan_global = df_gl["Monto"].sum() if not df_gl.empty else 0
-total_plan = plan_base + plan_otros + plan_global
+# 1. Presupuesto Total
+# Sumamos el itinerario + detalles + globales
+base_it = df_it[["Traslado_Monto", "Aloj_Monto", "Comida_Monto"]].sum().sum()
+otros_it = df_detalles["Monto"].sum() if not df_detalles.empty else 0.0
+global_it = df_gl["Monto"].sum() if not df_gl.empty else 0.0 # <--- CAMBIAR AQUÍ
 
+total_plan = base_it + otros_it + global_it
+
+# 2. Ya Pagado
+# Sumamos lo marcado como True en todas las tablas
 pag_base = (df_it.loc[df_it["Traslado_Pago"] == True, "Traslado_Monto"].sum() + 
             df_it.loc[df_it["Aloj_Pago"] == True, "Aloj_Monto"].sum() + 
             df_it.loc[df_it["Comida_Pago"] == True, "Comida_Monto"].sum())
-total_pag = pag_base + df_it["Otros_Monto"].sum() + (df_gl.loc[df_gl["Pagado"] == True, "Monto"].sum() if not df_gl.empty else 0)
 
-st.sidebar.metric("Presupuesto Total", f"$ {total_plan:,.2f}")
-st.sidebar.metric("Ya Pagado", f"$ {total_pag:,.2f}")
-st.sidebar.metric("Pendiente", f"$ {total_plan - total_pag:,.2f}")
+pag_otros = df_it["Otros_Monto"].sum() # Esto ya viene calculado de la lógica de Detalles_Otros
+
+# Sumamos globales pagados
+pag_global = df_gl.loc[df_gl["Pagado"] == True, "Monto"].sum() if not df_gl.empty else 0.0 # <--- CAMBIAR AQUÍ
+
+total_pagado = pag_base + pag_otros + pag_global
 
 # --- 5. TABS ---
 t1, t2, t3, t4 = st.tabs(["📅 Itinerario", "🎒 Globales", "📂 Adjuntos", "📍 Mapa"])
@@ -270,10 +271,28 @@ if not det_edit.equals(det_dia):
     st.rerun()
 
 with t2:
-    st.subheader("Gastos Globales")
-    df_gl_edit = st.data_editor(df_gl, num_rows="dynamic", width="stretch", hide_index=True)
+    st.subheader("🎒 Gastos Globales")
+    
+    # Configuración visual para que tú veas nombres bonitos
+    config_gl = {
+        "Pagado": st.column_config.CheckboxColumn("¿Pagado?"),
+        "Descripcion": st.column_config.TextColumn("Descripción"),
+        "Monto": st.column_config.NumberColumn("Monto $", format="$ %.2f")
+    }
+
+    # Aseguramos que el editor use los nombres técnicos (Monto, Descripcion)
+    df_gl_edit = st.data_editor(
+        df_gl, 
+        num_rows="dynamic", 
+        width="stretch", 
+        hide_index=True,
+        column_config=config_gl
+    )
+
     if not df_gl_edit.equals(df_gl):
-        guardar_datos_sql(df_gl_edit, "Globales"); st.rerun()
+        # GUARDADO CLAVE: Usamos el nombre de tabla en minúsculas
+        guardar_datos_sql(df_gl_edit, "globales")
+        st.rerun()
 
 with t3:
     st.info("La gestión de archivos adjuntos se guarda localmente en el servidor.")
