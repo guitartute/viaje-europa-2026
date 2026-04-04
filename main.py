@@ -247,6 +247,24 @@ with t1:
         except Exception as e:
             # Si algo falla al leer el texto, volvemos a los valores por defecto
             pass
+
+    if f_ini > fecha_actual:
+    restante = f_ini - fecha_actual
+    dias = restante.days
+    
+    # Usamos columnas para que se vea elegante en el sidebar o cabecera
+    st.success(f"✈️ ¡Faltan **{dias}** días para tu viaje a Europa!")
+    st.caption(f"Salida programada: {f_ini.strftime('%d/%m/%Y')}")
+
+    elif f_ini == fecha_actual:
+        st.balloons() # ¡Efecto de globos si es hoy!
+        st.success("🎉 ¡EL VIAJE COMIENZA HOY! ¡A disfrutar!")
+        
+    else:
+        if f_fin >= fecha_actual:
+            st.info("🌍 Actualmente estás en tu aventura europea.")
+        else:
+            st.write("🏁 Este viaje ya ha finalizado.")
     
     # --- SIDEBAR ---
     st.sidebar.header("⚙️ Configuración")
