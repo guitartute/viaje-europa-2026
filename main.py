@@ -130,27 +130,36 @@ for c in ["Traslado_Pago", "Aloj_Pago", "Comida_Pago"]:
     if c in df_it.columns: # <--- AGREGAR ESTO
         df_it[c] = df_it[c].astype(bool)
 
-# --- 4. CÁLCULOS Y SIDEBAR ---
+# --- 4. CÁLCULOS (PRIMERO, SIN DIBUJAR NADA AÚN) ---
+
+# 1. Presupuesto Total
+base_it = df_it[["Traslado_Monto", "Aloj_Monto", "Comida_Monto"]].sum().sum()
+otros_it = df_detalles["Monto"].sum() if not df_detalles.empty else 0.0
+global_it = df_gl["Monto"].sum() if not df_gl.empty else 0.0
+
+total_plan = base_it + otros_it + global_it
+
+# 2. Ya Pagado
+pag_base = (df_it.loc[df_it["Traslado_Pago"] == True, "Traslado_Monto"].sum() + 
+            df_it.loc[df_it["Aloj_Pago"] == True, "Aloj_Monto"].sum() + 
+            df_it.loc[df_it["Comida_Pago"] == True, "Comida_Monto"].sum())
+
+pag_otros = df_it["Otros_Monto"].sum()
+pag_global = df_gl.loc[df_gl["Pagado"] == True, "Monto"].sum() if not df_gl.empty else 0.0
+
+total_pagado = pag_base + pag_otros + pag_global
+
+# --- 5. SIDEBAR (ORDEN VISUAL) ---
+
+# A. MÉTRICAS (ARRIBA DE TODO)
+st.sidebar.header("💰 Resumen Financiero")
+st.sidebar.metric("Presupuesto Total", f"$ {total_plan:,.2f}")
+st.sidebar.metric("Ya Pagado", f"$ {total_pagado:,.2f}")
+st.sidebar.metric("Pendiente", f"$ {total_plan - total_pagado:,.2f}")
+
 st.sidebar.markdown("---")
-st.sidebar.subheader("📦 Gestión de Datos")
 
-# Botón para descargar todo como un archivo SQLite (Backup real)
-with open(DB_NAME, "rb") as f:
-    st.sidebar.download_button(
-        label="📥 Descargar Backup (.db)",
-        data=f,
-        file_name="backup_viaje.db",
-        mime="application/x-sqlite3"
-    )
-
-# Botón para subir un backup previo
-uploaded_db = st.sidebar.file_uploader("📤 Restaurar Backup", type="db")
-if uploaded_db:
-    with open(DB_NAME, "wb") as f:
-        f.write(uploaded_db.getbuffer())
-    st.sidebar.success("Base de datos restaurada. Recargando...")
-    st.rerun()
-
+# B. CONFIGURACIÓN (CENTRO)
 st.sidebar.header("⚙️ Configuración")
 f_ini = st.sidebar.date_input("Inicio", datetime.now())
 f_fin = st.sidebar.date_input("Fin", datetime.now() + timedelta(days=7))
@@ -161,7 +170,6 @@ if st.sidebar.button("Reiniciar Itinerario"):
         nuevas_filas = []
         for i in range(dias):
             fecha_str = (f_ini + timedelta(days=i)).strftime("%d/%m (%a)")
-            # USAMOS NOMBRES LIMPIOS SIN ESPACIOS NI $
             nuevas_filas.append({
                 "Fecha": fecha_str, 
                 "Pais": "", 
@@ -177,38 +185,32 @@ if st.sidebar.button("Reiniciar Itinerario"):
             })
         
         df_it_nuevo = pd.DataFrame(nuevas_filas)
-        # IMPORTANTE: El nombre de la tabla en minúsculas para coincidir con init_db
         guardar_datos_sql(df_it_nuevo, "itinerario") 
         st.success("¡Itinerario creado!")
         st.rerun()
 
-# 1. Presupuesto Total
-# Sumamos el itinerario + detalles + globales
-base_it = df_it[["Traslado_Monto", "Aloj_Monto", "Comida_Monto"]].sum().sum()
-otros_it = df_detalles["Monto"].sum() if not df_detalles.empty else 0.0
-global_it = df_gl["Monto"].sum() if not df_gl.empty else 0.0 # <--- CAMBIAR AQUÍ
-
-total_plan = base_it + otros_it + global_it
-
-# 2. Ya Pagado
-# Sumamos lo marcado como True en todas las tablas
-pag_base = (df_it.loc[df_it["Traslado_Pago"] == True, "Traslado_Monto"].sum() + 
-            df_it.loc[df_it["Aloj_Pago"] == True, "Aloj_Monto"].sum() + 
-            df_it.loc[df_it["Comida_Pago"] == True, "Comida_Monto"].sum())
-
-pag_otros = df_it["Otros_Monto"].sum() # Esto ya viene calculado de la lógica de Detalles_Otros
-
-# Sumamos globales pagados
-pag_global = df_gl.loc[df_gl["Pagado"] == True, "Monto"].sum() if not df_gl.empty else 0.0 # <--- CAMBIAR AQUÍ
-
-total_pagado = pag_base + pag_otros + pag_global
-
-# --- MOSTRAR MÉTRICAS EN EL SIDEBAR ---
 st.sidebar.markdown("---")
-st.sidebar.subheader("💰 Resumen Financiero")
-st.sidebar.metric("Presupuesto Total", f"$ {total_plan:,.2f}")
-st.sidebar.metric("Ya Pagado", f"$ {total_pagado:,.2f}")
-st.sidebar.metric("Pendiente", f"$ {total_plan - total_pagado:,.2f}")
+
+# C. GESTIÓN DE DATOS / BACKUP (ABAJO DE TODO)
+st.sidebar.subheader("📦 Gestión de Datos")
+
+# Botón para descargar
+with open(DB_NAME, "rb") as f:
+    st.sidebar.download_button(
+        label="📥 Descargar Backup (.db)",
+        data=f,
+        file_name="backup_viaje.db",
+        mime="application/x-sqlite3"
+    )
+
+# Botón para subir (dentro de un expander para que no estorbe)
+with st.sidebar.expander("📤 Restaurar Backup"):
+    uploaded_db = st.file_uploader("Subir archivo previo", type="db")
+    if uploaded_db:
+        with open(DB_NAME, "wb") as f:
+            f.write(uploaded_db.getbuffer())
+        st.success("Copia restaurada correctamente.")
+        st.rerun()
 
 # --- 5. TABS ---
 t1, t2, t3, t4 = st.tabs(["📅 Itinerario", "🎒 Globales", "📂 Adjuntos", "📍 Mapa"])
