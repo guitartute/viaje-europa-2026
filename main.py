@@ -266,24 +266,26 @@ det_edit = st.data_editor(
 )
 
 if not det_edit.equals(det_dia):
-    # 3. Guardado limpio: Unimos el día editado con el resto
+    # 1. Reconstruimos el DataFrame de detalles con los nuevos datos
     otros_dias = df_detalles[df_detalles["Fecha"] != dia_sel]
     nuevo_dia = det_edit.copy()
-    nuevo_dia["Fecha"] = dia_sel # Asignamos la fecha al bloque editado
+    nuevo_dia["Fecha"] = dia_sel
     
     df_detalles_nuevo = pd.concat([otros_dias, nuevo_dia], ignore_index=True)
-    guardar_datos_sql(df_detalles_nuevo, "detalles_otros")
     
-    # 4. ACTUALIZACIÓN DEL TOTAL (Clave para que sume al itinerario)
-    # Solo sumamos lo que está marcado como "Pagado" (Asegúrate que el nombre sea 'Pagado' y 'Monto')
+    # 2. CALCULAMOS EL TOTAL (Solo lo pagado)
+    # Importante: Usamos 'Monto' y 'Pagado' (nombres técnicos de tu DB)
     total_dia = det_edit.loc[det_edit["Pagado"] == True, "Monto"].sum()
     
-    # Actualizamos la columna del itinerario
-    df_it_edit.loc[df_it_edit["Fecha"] == dia_sel, "Otros_Monto"] = total_dia
+    # 3. IMPACTAMOS EL ITINERARIO (La tabla que ves arriba)
+    # Buscamos la fila exacta y actualizamos la columna técnica
+    df_it.loc[df_it["Fecha"] == dia_sel, "Otros_Monto"] = total_dia
     
-    # Guardamos ambas tablas
+    # 4. GUARDADO DOBLE EN SQL
     guardar_datos_sql(df_detalles_nuevo, "detalles_otros")
-    guardar_datos_sql(df_it_edit, "itinerario")
+    guardar_datos_sql(df_it, "itinerario") # <--- Esto es vital
+    
+    # 5. RECARGA PARA MOSTRAR CAMBIOS
     st.rerun()
     
 with t2:
